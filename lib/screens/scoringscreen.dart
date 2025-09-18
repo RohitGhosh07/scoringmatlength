@@ -1166,18 +1166,18 @@ class _RingsPainter extends CustomPainter {
       canvas.drawCircle(center, r, ring);
     }
 
-    // Labels
-    for (int i = 0; i < rings.length; i++) {
-      final r = rings[i] * halfMin;
-      final pos = center + Offset(r + 10, 0);
-      _drawText(
-        canvas,
-        '$i',
-        pos,
-        color: Colors.white.withOpacity(0.9),
-        fontSize: math.max(14, size.shortestSide * 0.035),
-      );
-    }
+    // // Labels
+    // for (int i = 0; i < rings.length; i++) {
+    //   final r = rings[i] * halfMin;
+    //   final pos = center + Offset(r + 10, 0);
+    //   _drawText(
+    //     canvas,
+    //     '$i',
+    //     pos,
+    //     color: Colors.white.withOpacity(0.9),
+    //     fontSize: math.max(14, size.shortestSide * 0.035),
+    //   );
+    // }
 
     // Previous ends (faint)
     for (final entry in shots.entries) {
