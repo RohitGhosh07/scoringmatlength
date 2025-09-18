@@ -10,11 +10,15 @@ class MatWoodScreen extends StatefulWidget {
 
 class _MatWoodScreenState extends State<MatWoodScreen>
     with TickerProviderStateMixin {
-  // Vibrant, clean greens
+  // Greens for chrome
   static const Color g1 = Color(0xFF148D61);
   static const Color g2 = Color(0xFF30B082);
   static const Color g3 = Color(0xFF67C196);
   static const Color g4 = Color(0xFF17875F);
+
+  // Player colors (high contrast on dark field)
+  static const Color p1Dot = Color(0xFF5BE7C4); // mint/cyan
+  static const Color p2Dot = Color(0xFFFFD166); // amber
 
   final List<PlayerData> _players = [
     PlayerData(
@@ -22,18 +26,23 @@ class _MatWoodScreenState extends State<MatWoodScreen>
       name: 'Arya',
       endsPlayed: 6,
       recent: ['3', 'Wood', '1', '2'],
-      color: const Color(0xFF30B082), // Bright green
     ),
     PlayerData(
       id: 'p2',
       name: 'Rohit',
       endsPlayed: 5,
       recent: ['2', '2', 'Wood', '4'],
-      color: const Color(0xFF67C196), // Light green
     ),
   ];
   String _selectedPlayerId = 'p1';
 
+  // Persisted shots per player (stored as normalized positions)
+  final Map<String, List<Shot>> _shotsByPlayer = {
+    'p1': <Shot>[],
+    'p2': <Shot>[],
+  };
+
+  // Last tap ripple
   Offset? _lastTapLocal;
   late final AnimationController _rippleCtrl = AnimationController(
     vsync: this,
@@ -53,9 +62,21 @@ class _MatWoodScreenState extends State<MatWoodScreen>
 
   void _recordTap(Offset localPos, Size size) {
     final result = _classifyTap(localPos, size);
+
+    // Save as normalized so it survives size changes/orientation
+    final norm = Offset(localPos.dx / size.width, localPos.dy / size.height);
+    final shot = Shot(
+      playerId: _selectedPlayerId,
+      normPos: norm,
+      value: result,
+    );
+
     setState(() {
       _lastTapLocal = localPos;
       _rippleCtrl.forward(from: 0);
+
+      _shotsByPlayer[_selectedPlayerId]!.add(shot); // persist dot on canvas
+
       _selected.recent.insert(0, result);
       if (_selected.recent.length > 10) _selected.recent.removeLast();
     });
@@ -72,7 +93,7 @@ class _MatWoodScreenState extends State<MatWoodScreen>
     );
   }
 
-  // Full-screen-friendly thresholds (use 90% of half-min as outer ring)
+  // Full-screen thresholds
   String _classifyTap(Offset localPos, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final dx = localPos.dx - center.dx;
@@ -94,14 +115,21 @@ class _MatWoodScreenState extends State<MatWoodScreen>
   }
 
   void _undo() {
-    if (_selected.recent.isEmpty) return;
-    setState(() => _selected.recent.removeAt(0));
+    // Undo removes last shot for selected player + recent chip
+    final list = _shotsByPlayer[_selectedPlayerId]!;
+    if (list.isNotEmpty) {
+      setState(() => list.removeLast());
+    }
+    if (_selected.recent.isNotEmpty) {
+      setState(() => _selected.recent.removeAt(0));
+    }
   }
 
   void _saveAndNext() {
+    // Keep shots on screen (as requested). You can clear-on-save if you prefer.
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Saved. Proceeding to next…'),
+        content: Text('Saved. Points remain visible.'),
         behavior: SnackBarBehavior.floating,
         duration: Duration(milliseconds: 900),
       ),
@@ -117,7 +145,6 @@ class _MatWoodScreenState extends State<MatWoodScreen>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgTop = isDark ? const Color(0xFF0A0F0C) : const Color(0xFFF2FFF8);
     final bgBottom = isDark ? const Color(0xFF0E1511) : const Color(0xFFE9FFF4);
 
     return Scaffold(
@@ -125,16 +152,19 @@ class _MatWoodScreenState extends State<MatWoodScreen>
       backgroundColor: bgBottom,
       body: Stack(
         children: [
-          // FULL-SCREEN TARGET
+          // FULL-SCREEN TARGET with persisted dots
           Positioned.fill(
             child: _TapCanvas(
               lastTapLocal: _lastTapLocal,
               ripple: _ripple,
+              selectedPlayerId: _selectedPlayerId,
+              shotsByPlayer: _shotsByPlayer,
+              playerColors: const {'p1': p1Dot, 'p2': p2Dot},
               onTapResolved: _recordTap,
             ),
           ),
 
-          // TOP FLOAT: Player toggle + mini stats
+          // TOP FLOAT
           SafeArea(
             minimum: const EdgeInsets.fromLTRB(16, 14, 16, 0),
             child: Column(
@@ -158,11 +188,17 @@ class _MatWoodScreenState extends State<MatWoodScreen>
                         ),
                       ),
                       const SizedBox(width: 8),
-                      IconButton(
-                        onPressed: () {},
-                        icon: const Icon(CupertinoIcons.gear_alt),
-                        color: Colors.white,
-                        tooltip: 'Settings',
+                      // tiny legend
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            _LegendDot(color: p1Dot, label: 'Arya'),
+                            SizedBox(width: 10),
+                            _LegendDot(color: p2Dot, label: 'Rohit'),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -205,7 +241,7 @@ class _MatWoodScreenState extends State<MatWoodScreen>
             ),
           ),
 
-          // BOTTOM FLOAT: recent chips + actions
+          // BOTTOM FLOAT
           SafeArea(
             minimum: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Align(
@@ -254,38 +290,33 @@ class _MatWoodScreenState extends State<MatWoodScreen>
   }
 }
 
-class Shot {
-  final Offset position;
-  final String value;
-  final DateTime timestamp;
-
-  Shot({
-    required this.position,
-    required this.value,
-    DateTime? timestamp,
-  }) : timestamp = timestamp ?? DateTime.now();
-}
+/* ===================== DATA MODELS ===================== */
 
 class PlayerData {
   final String id;
   final String name;
   final int endsPlayed;
   final List<String> recent;
-  final List<Shot> shots;
-  final Color color; // Player-specific color
-
   PlayerData({
     required this.id,
     required this.name,
     required this.endsPlayed,
     required this.recent,
-    List<Shot>? shots,
-    Color? color,
-  }) : shots = shots ?? [],
-       color = color ?? const Color(0xFF30B082);
+  });
 }
 
-/* ---------------- UI PARTS ---------------- */
+class Shot {
+  final String playerId;
+  final Offset normPos; // x in [0..1], y in [0..1]
+  final String value; // '0'..'4' or 'Wood'
+  const Shot({
+    required this.playerId,
+    required this.normPos,
+    required this.value,
+  });
+}
+
+/* ===================== UI PARTS ===================== */
 
 class _GlassPill extends StatelessWidget {
   const _GlassPill({required this.child});
@@ -325,9 +356,6 @@ class _PlayerToggle extends StatelessWidget {
   final List<PlayerData> players;
   final String selectedId;
   final ValueChanged<String> onChanged;
-
-  static const Color g2 = _MatWoodScreenState.g2;
-  static const Color g4 = _MatWoodScreenState.g4;
 
   @override
   Widget build(BuildContext context) {
@@ -369,6 +397,33 @@ class _PlayerToggle extends StatelessWidget {
           );
         }).toList(),
       ),
+    );
+  }
+}
+
+class _LegendDot extends StatelessWidget {
+  const _LegendDot({required this.color, required this.label});
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -486,16 +541,23 @@ class _SolidButton extends StatelessWidget {
   }
 }
 
-/* ---------------- FULL-SCREEN CANVAS ---------------- */
+/* ===================== FULL-SCREEN CANVAS ===================== */
 
 class _TapCanvas extends StatefulWidget {
   const _TapCanvas({
     required this.lastTapLocal,
     required this.ripple,
+    required this.selectedPlayerId,
+    required this.shotsByPlayer,
+    required this.playerColors,
     required this.onTapResolved,
   });
+
   final Offset? lastTapLocal;
   final Animation<double> ripple;
+  final String selectedPlayerId;
+  final Map<String, List<Shot>> shotsByPlayer;
+  final Map<String, Color> playerColors;
   final void Function(Offset localPos, Size canvasSize) onTapResolved;
 
   @override
@@ -510,20 +572,22 @@ class _TapCanvasState extends State<_TapCanvas> {
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTapDown: (d) {
-        widget.onTapResolved(d.localPosition, context.size ?? const Size(0, 0));
-      },
+      onTapDown: (d) => widget.onTapResolved(
+        d.localPosition,
+        context.size ?? const Size(0, 0),
+      ),
       child: AnimatedBuilder(
         animation: widget.ripple,
-        builder: (_, __) {
-          return CustomPaint(
-            painter: _FullScreenRingsPainter(
-              fractions: _fractions,
-              lastTap: widget.lastTapLocal,
-              rippleValue: widget.ripple.value,
-            ),
-          );
-        },
+        builder: (_, __) => CustomPaint(
+          painter: _FullScreenRingsPainter(
+            fractions: _fractions,
+            lastTap: widget.lastTapLocal,
+            rippleValue: widget.ripple.value,
+            selectedPlayerId: widget.selectedPlayerId,
+            shotsByPlayer: widget.shotsByPlayer,
+            playerColors: widget.playerColors,
+          ),
+        ),
       ),
     );
   }
@@ -534,11 +598,17 @@ class _FullScreenRingsPainter extends CustomPainter {
     required this.fractions,
     required this.lastTap,
     required this.rippleValue,
+    required this.selectedPlayerId,
+    required this.shotsByPlayer,
+    required this.playerColors,
   });
 
   final List<double> fractions;
   final Offset? lastTap;
   final double rippleValue;
+  final String selectedPlayerId;
+  final Map<String, List<Shot>> shotsByPlayer;
+  final Map<String, Color> playerColors;
 
   static const Color g1 = _MatWoodScreenState.g1;
   static const Color g2 = _MatWoodScreenState.g2;
@@ -552,14 +622,10 @@ class _FullScreenRingsPainter extends CustomPainter {
 
     // Background gradient + soft vignette
     final bgPaint = Paint()
-      ..shader = LinearGradient(
+      ..shader = const LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [
-          const Color(0xFF113A2B),
-          const Color(0xFF0F2E24),
-          const Color(0xFF0B231C),
-        ],
+        colors: [Color(0xFF113A2B), Color(0xFF0F2E24), Color(0xFF0B231C)],
       ).createShader(Offset.zero & size);
     canvas.drawRect(Offset.zero & size, bgPaint);
 
@@ -571,7 +637,7 @@ class _FullScreenRingsPainter extends CustomPainter {
       ).createShader(Rect.fromCircle(center: center, radius: halfMin * 0.95));
     canvas.drawCircle(center, halfMin * 0.95, glowPaint);
 
-    // Rings (thicker, bright, easy to see)
+    // Rings
     final ringColors = [g3, g2, g1, g4, g2];
     for (int i = 0; i < fractions.length; i++) {
       final r = fractions[i] * halfMin;
@@ -584,7 +650,7 @@ class _FullScreenRingsPainter extends CustomPainter {
       canvas.drawCircle(center, r, ring);
     }
 
-    // Labels (big, readable) – placed on the right side
+    // Labels 0..4 on right
     for (int i = 0; i < fractions.length; i++) {
       final r = fractions[i] * halfMin;
       final pos = center + Offset(r + 10, 0);
@@ -597,21 +663,54 @@ class _FullScreenRingsPainter extends CustomPainter {
       );
     }
 
-    // Tap marker + ripple
-    if (lastTap != null) {
-      final dotPaint = Paint()..color = g2;
-      canvas.drawCircle(
-        lastTap!,
-        math.max(3, size.shortestSide * 0.008),
-        dotPaint,
-      );
+    // Draw persisted shots for both players
+    for (final entry in shotsByPlayer.entries) {
+      final pid = entry.key;
+      final shots = entry.value;
+      if (shots.isEmpty) continue;
 
-      final maxRipple = fractions.last * halfMin * 1.05;
-      final rippleRadius = 14 + maxRipple * rippleValue;
+      final baseColor = playerColors[pid] ?? Colors.white;
+      final isSelected = pid == selectedPlayerId;
+      final color = isSelected ? baseColor : baseColor.withOpacity(0.55);
+
+      for (final s in shots) {
+        final pos = Offset(
+          s.normPos.dx * size.width,
+          s.normPos.dy * size.height,
+        );
+
+        // Dot with outline for visibility
+        final dotRadius = math.max(4.0, size.shortestSide * 0.010);
+        final stroke = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = math.max(2.0, size.shortestSide * 0.0035)
+          ..color = Colors.black.withOpacity(0.6);
+        final fill = Paint()..color = color;
+
+        canvas.drawCircle(pos, dotRadius, stroke);
+        canvas.drawCircle(pos, dotRadius - 1.5, fill);
+
+        // Label (0..4 or W)
+        final label = s.value.toLowerCase() == 'wood' ? 'W' : s.value;
+        _drawLabel(
+          canvas,
+          label,
+          pos + Offset(dotRadius + 4, -dotRadius - 2),
+          fg: Colors.white,
+          bg: Colors.black.withOpacity(0.35),
+          size: math.max(10, size.shortestSide * 0.028),
+        );
+      }
+    }
+
+    // Last tap ripple
+    if (lastTap != null) {
       final ripplePaint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = math.max(2, size.shortestSide * 0.004)
         ..color = g2.withOpacity((1 - rippleValue).clamp(0.0, 1.0));
+      final maxRipple = fractions.last * halfMin * 1.05;
+      final rippleRadius = 14 + maxRipple * rippleValue;
       canvas.drawCircle(lastTap!, rippleRadius, ripplePaint);
     }
   }
@@ -637,10 +736,62 @@ class _FullScreenRingsPainter extends CustomPainter {
     tp.paint(canvas, Offset(pos.dx, pos.dy - tp.height / 2));
   }
 
+  void _drawLabel(
+    Canvas canvas,
+    String text,
+    Offset pos, {
+    required Color fg,
+    required Color bg,
+    required double size,
+  }) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: fg,
+          fontSize: size,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.2,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final padding = 4.0;
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        pos.dx - padding,
+        pos.dy - padding,
+        tp.width + padding * 2,
+        tp.height + padding * 2,
+      ),
+      const Radius.circular(6),
+    );
+    final paint = Paint()..color = bg;
+    canvas.drawRRect(rect, paint);
+    tp.paint(canvas, Offset(pos.dx, pos.dy));
+  }
+
   @override
   bool shouldRepaint(covariant _FullScreenRingsPainter old) {
     return old.lastTap != lastTap ||
         old.rippleValue != rippleValue ||
-        old.fractions != fractions;
+        old.fractions != fractions ||
+        old.selectedPlayerId != selectedPlayerId ||
+        !mapEquals(old.shotsByPlayer, shotsByPlayer);
+  }
+
+  // shallow map compare (positions change -> new instances -> triggers repaint)
+  bool mapEquals(Map<String, List<Shot>> a, Map<String, List<Shot>> b) {
+    if (a.length != b.length) return false;
+    for (final k in a.keys) {
+      final la = a[k]!;
+      final lb = b[k]!;
+      if (la.length != lb.length) return false;
+      for (int i = 0; i < la.length; i++) {
+        if (la[i] != lb[i]) return false;
+      }
+    }
+    return true;
   }
 }
