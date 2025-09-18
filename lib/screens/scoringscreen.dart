@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class MatWoodScreen extends StatefulWidget {
   const MatWoodScreen({super.key});
@@ -10,40 +11,34 @@ class MatWoodScreen extends StatefulWidget {
 
 class _MatWoodScreenState extends State<MatWoodScreen>
     with TickerProviderStateMixin {
-  // Greens for chrome
+  // Chrome colors
   static const Color g1 = Color(0xFF148D61);
   static const Color g2 = Color(0xFF30B082);
   static const Color g3 = Color(0xFF67C196);
   static const Color g4 = Color(0xFF17875F);
 
-  // Player colors (high contrast on dark field)
-  static const Color p1Dot = Color(0xFF5BE7C4); // mint/cyan
-  static const Color p2Dot = Color(0xFFFFD166); // amber
+  // Player dot colors
+  static const Color p1Dot = Color(0xFF5BE7C4); // Arya
+  static const Color p2Dot = Color(0xFFFFD166); // Rohit
 
-  final List<PlayerData> _players = [
-    PlayerData(
-      id: 'p1',
-      name: 'Arya',
-      endsPlayed: 6,
-      recent: ['3', 'Wood', '1', '2'],
-    ),
-    PlayerData(
-      id: 'p2',
-      name: 'Rohit',
-      endsPlayed: 5,
-      recent: ['2', '2', 'Wood', '4'],
-    ),
+  // Players (dummy)
+  final List<Player> _players = const [
+    Player(id: 'p1', name: 'Arya', color: p1Dot),
+    Player(id: 'p2', name: 'Rohit', color: p2Dot),
   ];
   String _selectedPlayerId = 'p1';
 
-  // Persisted shots per player (stored as normalized positions)
-  final Map<String, List<Shot>> _shotsByPlayer = {
-    'p1': <Shot>[],
-    'p2': <Shot>[],
+  // Ends -> Player -> Shots
+  final Map<int, Map<String, List<Shot>>> _shots = {
+    1: {'p1': [], 'p2': []},
   };
+  int _currentEnd = 1;
 
-  // Last tap ripple
+  // UI state
   Offset? _lastTapLocal;
+  Offset? _hoverLocal; // desktop hover preview
+  double _outerFraction = 0.90; // adjustable from settings
+
   late final AnimationController _rippleCtrl = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 600),
@@ -53,48 +48,90 @@ class _MatWoodScreenState extends State<MatWoodScreen>
     curve: Curves.easeOutCubic,
   );
 
-  PlayerData get _selected => _players.firstWhere(
-    (p) => p.id == _selectedPlayerId,
-    orElse: () => _players.first,
-  );
+  Player get _selected => _players.firstWhere((p) => p.id == _selectedPlayerId);
+
+  Map<String, List<Shot>> get _endShots => _shots[_currentEnd]!;
+  List<Shot> _playerShots(String pid) => _endShots[pid]!;
+  void _ensureEnd(int end) =>
+      _shots.putIfAbsent(end, () => {'p1': [], 'p2': []});
+
+  /* -------------------- Actions -------------------- */
 
   void _switchPlayer(String id) => setState(() => _selectedPlayerId = id);
 
   void _recordTap(Offset localPos, Size size) {
-    final result = _classifyTap(localPos, size);
-
-    // Save as normalized so it survives size changes/orientation
+    final value = _classifyTap(localPos, size, _outerFraction);
     final norm = Offset(localPos.dx / size.width, localPos.dy / size.height);
     final shot = Shot(
       playerId: _selectedPlayerId,
       normPos: norm,
-      value: result,
+      value: value,
+      end: _currentEnd,
     );
 
     setState(() {
       _lastTapLocal = localPos;
       _rippleCtrl.forward(from: 0);
-
-      _shotsByPlayer[_selectedPlayerId]!.add(shot); // persist dot on canvas
-
-      _selected.recent.insert(0, result);
-      if (_selected.recent.length > 10) _selected.recent.removeLast();
+      _playerShots(_selectedPlayerId).add(shot);
     });
 
-    final msg = result == 'Wood'
-        ? 'Wood recorded'
-        : 'Mat length set to $result';
+    final msg = value == 'Wood' ? 'Wood recorded' : 'Mat length set to $value';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg),
+        content: Text('End $_currentEnd • ${_selected.name}: $msg'),
         behavior: SnackBarBehavior.floating,
         duration: const Duration(milliseconds: 900),
       ),
     );
   }
 
-  // Full-screen thresholds
-  String _classifyTap(Offset localPos, Size size) {
+  void _undo() {
+    final list = _playerShots(_selectedPlayerId);
+    if (list.isNotEmpty) {
+      setState(() => list.removeLast());
+    }
+  }
+
+  void _save() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Saved current end. Points stay visible.'),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(milliseconds: 900),
+      ),
+    );
+  }
+
+  void _nextEnd() {
+    setState(() {
+      _currentEnd += 1;
+      _ensureEnd(_currentEnd);
+    });
+  }
+
+  void _prevEnd() {
+    if (_currentEnd <= 1) return;
+    setState(() => _currentEnd -= 1);
+  }
+
+  void _newEnd() {
+    setState(() {
+      _currentEnd = (_shots.keys.isEmpty
+          ? 1
+          : (_shots.keys.reduce(math.max) + 1));
+      _ensureEnd(_currentEnd);
+    });
+  }
+
+  void _clearCurrentEnd() {
+    setState(() {
+      _shots[_currentEnd] = {'p1': [], 'p2': []};
+    });
+  }
+
+  /* -------------------- Logic -------------------- */
+
+  String _classifyTap(Offset localPos, Size size, double outerFraction) {
     final center = Offset(size.width / 2, size.height / 2);
     final dx = localPos.dx - center.dx;
     final dy = localPos.dy - center.dy;
@@ -106,7 +143,7 @@ class _MatWoodScreenState extends State<MatWoodScreen>
       0.36 * halfMin,
       0.54 * halfMin,
       0.72 * halfMin,
-      0.90 * halfMin,
+      outerFraction * halfMin, // adjustable outer ring
     ];
     for (int i = 0; i < thresholds.length; i++) {
       if (r <= thresholds[i]) return '$i';
@@ -114,246 +151,577 @@ class _MatWoodScreenState extends State<MatWoodScreen>
     return 'Wood';
   }
 
-  void _undo() {
-    // Undo removes last shot for selected player + recent chip
-    final list = _shotsByPlayer[_selectedPlayerId]!;
-    if (list.isNotEmpty) {
-      setState(() => list.removeLast());
-    }
-    if (_selected.recent.isNotEmpty) {
-      setState(() => _selected.recent.removeAt(0));
+  /* -------------------- Desktop Shortcuts -------------------- */
+
+  void _handleKey(RawKeyEvent e) {
+    if (e is! RawKeyDownEvent) return;
+    final key = e.logicalKey.keyLabel.toLowerCase();
+    switch (key) {
+      case 'a':
+        _switchPlayer('p1');
+        break;
+      case 'r':
+        _switchPlayer('p2');
+        break;
+      case 'n':
+        _nextEnd();
+        break;
+      case 'p':
+        _prevEnd();
+        break;
+      case 'u':
+        _undo();
+        break;
+      case 's':
+        _save();
+        break;
     }
   }
 
-  void _saveAndNext() {
-    // Keep shots on screen (as requested). You can clear-on-save if you prefer.
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Saved. Points remain visible.'),
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(milliseconds: 900),
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _rippleCtrl.dispose();
-    super.dispose();
-  }
+  /* -------------------- UI -------------------- */
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgBottom = isDark ? const Color(0xFF0E1511) : const Color(0xFFE9FFF4);
 
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      backgroundColor: bgBottom,
-      body: Stack(
-        children: [
-          // FULL-SCREEN TARGET with persisted dots
-          Positioned.fill(
-            child: _TapCanvas(
-              lastTapLocal: _lastTapLocal,
-              ripple: _ripple,
-              selectedPlayerId: _selectedPlayerId,
-              shotsByPlayer: _shotsByPlayer,
-              playerColors: const {'p1': p1Dot, 'p2': p2Dot},
-              onTapResolved: _recordTap,
-            ),
-          ),
+    return RawKeyboardListener(
+      focusNode: FocusNode()..requestFocus(),
+      onKey: _handleKey,
+      child: LayoutBuilder(
+        builder: (ctx, constraints) {
+          final desktop = constraints.maxWidth >= 900;
+          final canvas = _CanvasArea(
+            lastTapLocal: _lastTapLocal,
+            hoverLocal: _hoverLocal,
+            ripple: _ripple,
+            currentEnd: _currentEnd,
+            shots: _shots,
+            players: _players,
+            selectedPlayerId: _selectedPlayerId,
+            outerFraction: _outerFraction,
+            onTapResolved: _recordTap,
+            onHover: (p) => setState(() => _hoverLocal = p),
+          );
 
-          // TOP FLOAT
-          SafeArea(
-            minimum: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _GlassPill(
-                  child: Row(
-                    children: [
-                      IconButton(
-                        onPressed: () => Navigator.maybePop(context),
-                        icon: const Icon(CupertinoIcons.chevron_back),
-                        color: Colors.white,
-                        tooltip: 'Back',
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _PlayerToggle(
-                          players: _players,
-                          selectedId: _selectedPlayerId,
-                          onChanged: _switchPlayer,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // tiny legend
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            _LegendDot(color: p1Dot, label: 'Arya'),
-                            SizedBox(width: 10),
-                            _LegendDot(color: p2Dot, label: 'Rohit'),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _GlassPill(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
+          final controls = _ControlPanel(
+            players: _players,
+            selectedId: _selectedPlayerId,
+            onPlayerChanged: _switchPlayer,
+            currentEnd: _currentEnd,
+            onPrevEnd: _prevEnd,
+            onNextEnd: _nextEnd,
+            onNewEnd: _newEnd,
+            onClearEnd: _clearCurrentEnd,
+            onSave: _save,
+            endStats: _computeStatsForEnd(_currentEnd),
+            onOpenSettings: () => _openSettingsSheet(context),
+          );
+
+          if (desktop) {
+            // Desktop / large tablet split layout
+            return Scaffold(
+              backgroundColor: isDark
+                  ? const Color(0xFF0E1511)
+                  : const Color(0xFFE9FFF4),
+              body: SafeArea(
+                child: Row(
+                  children: [
+                    Expanded(flex: 3, child: canvas),
+                    const SizedBox(width: 16),
+                    SizedBox(
+                      width: math.min(460, constraints.maxWidth * 0.35),
+                      child: controls,
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    const SizedBox(width: 16),
+                  ],
+                ),
+              ),
+            );
+          } else {
+            // Mobile stacked with floating pills
+            return Scaffold(
+              extendBodyBehindAppBar: true,
+              backgroundColor: isDark
+                  ? const Color(0xFF0E1511)
+                  : const Color(0xFFE9FFF4),
+              body: Stack(
+                children: [
+                  Positioned.fill(child: canvas),
+
+                  // Top: player + end mini bar
+                  SafeArea(
+                    minimum: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
-                          CupertinoIcons.chart_bar_alt_fill,
-                          size: 16,
-                          color: Colors.white,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Ends: ${_selected.endsPlayed}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
+                        _GlassPill(
+                          child: Row(
+                            children: [
+                              IconButton(
+                                onPressed: () => Navigator.maybePop(context),
+                                icon: const Icon(CupertinoIcons.chevron_back),
+                                color: Colors.white,
+                                tooltip: 'Back',
+                              ),
+                              Expanded(
+                                child: _PlayerToggle(
+                                  players: _players,
+                                  selectedId: _selectedPlayerId,
+                                  onChanged: _switchPlayer,
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: () => _openSettingsSheet(context),
+                                icon: const Icon(
+                                  CupertinoIcons.slider_horizontal_3,
+                                ),
+                                color: Colors.white,
+                                tooltip: 'Settings',
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Text(
-                          'Tap rings (0–4) or outside = Wood',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.85),
+                        const SizedBox(height: 8),
+                        _GlassPill(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                _EndChip(
+                                  label: 'End',
+                                  value: '$_currentEnd',
+                                  onPrev: _prevEnd,
+                                  onNext: _nextEnd,
+                                ),
+                                const SizedBox(width: 8),
+                                _LegendRow(players: _players),
+                              ],
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
 
-          // BOTTOM FLOAT
-          SafeArea(
-            minimum: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Align(
-              alignment: Alignment.bottomCenter,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _GlassPill(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 10,
+                  // Bottom: recent + actions
+                  SafeArea(
+                    minimum: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: _GlassPill(
+                        child: Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _RecentRow(
+                                shots: _playerShots(_selectedPlayerId),
+                              ),
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _FrostedButton.icon(
+                                      onPressed: _undo,
+                                      icon: CupertinoIcons.arrow_uturn_left,
+                                      label: 'Undo',
+                                      tint: g3,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: _SolidButton.icon(
+                                      onPressed: _save,
+                                      icon: CupertinoIcons
+                                          .check_mark_circled_solid,
+                                      label: 'Save',
+                                      color: g2,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                      child: _RecentChips(values: _selected.recent),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _FrostedButton.icon(
-                          onPressed: _undo,
-                          icon: CupertinoIcons.arrow_uturn_left,
-                          label: 'Undo',
-                          tint: g3,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _SolidButton.icon(
-                          onPressed: _saveAndNext,
-                          icon: CupertinoIcons.check_mark_circled_solid,
-                          label: 'Save & Next',
-                          color: g2,
-                        ),
-                      ),
-                    ],
                   ),
                 ],
               ),
-            ),
-          ),
-        ],
+            );
+          }
+        },
       ),
     );
   }
+
+  /* -------------------- Stats -------------------- */
+  EndStats _computeStatsForEnd(int end) {
+    final map = _shots[end] ?? {'p1': [], 'p2': []};
+    int wood = 0;
+    final ringCounts = List<int>.filled(5, 0);
+    final perPlayer = <String, int>{'p1': 0, 'p2': 0};
+
+    for (final entry in map.entries) {
+      perPlayer[entry.key] = entry.value.length;
+      for (final s in entry.value) {
+        if (s.value == 'Wood') {
+          wood++;
+        } else {
+          final idx = int.tryParse(s.value) ?? -1;
+          if (idx >= 0 && idx < 5) ringCounts[idx]++;
+        }
+      }
+    }
+    return EndStats(
+      ringCounts: ringCounts,
+      wood: wood,
+      perPlayerShots: perPlayer,
+    );
+  }
+
+  /* -------------------- Settings Sheet -------------------- */
+  void _openSettingsSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFF111A15),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (_) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          child: StatefulBuilder(
+            builder: (context, setS) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Canvas Settings',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 18,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Outer ring size',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '${(_outerFraction * 100).toStringAsFixed(0)}%',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ],
+                  ),
+                  Slider(
+                    value: _outerFraction,
+                    onChanged: (v) =>
+                        setS(() => _outerFraction = v.clamp(0.80, 0.95)),
+                    min: 0.80,
+                    max: 0.95,
+                    divisions: 15,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Tip: Larger outer ring makes “Wood” area smaller. Keep between 80–95% of half-min.',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.7),
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    ).whenComplete(() => setState(() {}));
+  }
 }
 
-/* ===================== DATA MODELS ===================== */
+/* ===================== MODELS ===================== */
 
-class PlayerData {
+class Player {
   final String id;
   final String name;
-  final int endsPlayed;
-  final List<String> recent;
-  PlayerData({
-    required this.id,
-    required this.name,
-    required this.endsPlayed,
-    required this.recent,
-  });
+  final Color color;
+  const Player({required this.id, required this.name, required this.color});
 }
 
 class Shot {
   final String playerId;
-  final Offset normPos; // x in [0..1], y in [0..1]
+  final Offset normPos; // [0..1] x [0..1]
   final String value; // '0'..'4' or 'Wood'
+  final int end;
   const Shot({
     required this.playerId,
     required this.normPos,
     required this.value,
+    required this.end,
+  });
+}
+
+class EndStats {
+  final List<int> ringCounts; // index 0..4
+  final int wood;
+  final Map<String, int> perPlayerShots;
+  const EndStats({
+    required this.ringCounts,
+    required this.wood,
+    required this.perPlayerShots,
   });
 }
 
 /* ===================== UI PARTS ===================== */
 
-class _GlassPill extends StatelessWidget {
-  const _GlassPill({required this.child});
-  final Widget child;
+class _ControlPanel extends StatelessWidget {
+  const _ControlPanel({
+    required this.players,
+    required this.selectedId,
+    required this.onPlayerChanged,
+    required this.currentEnd,
+    required this.onPrevEnd,
+    required this.onNextEnd,
+    required this.onNewEnd,
+    required this.onClearEnd,
+    required this.onSave,
+    required this.endStats,
+    required this.onOpenSettings,
+  });
+
+  final List<Player> players;
+  final String selectedId;
+  final ValueChanged<String> onPlayerChanged;
+  final int currentEnd;
+  final VoidCallback onPrevEnd;
+  final VoidCallback onNextEnd;
+  final VoidCallback onNewEnd;
+  final VoidCallback onClearEnd;
+  final VoidCallback onSave;
+  final EndStats endStats;
+  final VoidCallback onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Colors.black.withOpacity(0.25),
-            Colors.black.withOpacity(0.15),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.24)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.25),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
+    return Column(
+      children: [
+        _Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const _SectionTitle('Players'),
+              _PlayerToggleDesktop(
+                players: players,
+                selectedId: selectedId,
+                onChanged: onPlayerChanged,
+              ),
+            ],
           ),
-        ],
-      ),
-      child: ClipRRect(borderRadius: BorderRadius.circular(16), child: child),
+        ),
+        const SizedBox(height: 12),
+        _Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const _SectionTitle('End Controls'),
+              Row(
+                children: [
+                  _RoundIconButton(
+                    icon: CupertinoIcons.back,
+                    onPressed: onPrevEnd,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        'End $currentEnd',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _RoundIconButton(
+                    icon: CupertinoIcons.forward,
+                    onPressed: onNextEnd,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onNewEnd,
+                      icon: const Icon(CupertinoIcons.add_circled),
+                      label: const Text('New End'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onClearEnd,
+                      icon: const Icon(CupertinoIcons.delete),
+                      label: const Text('Clear End'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              ElevatedButton.icon(
+                onPressed: onSave,
+                icon: const Icon(CupertinoIcons.check_mark_circled_solid),
+                label: const Text('Save'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _MatWoodScreenState.g2,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: onOpenSettings,
+                icon: const Icon(CupertinoIcons.slider_horizontal_3),
+                label: const Text('Canvas Settings'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        _Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const _SectionTitle('End Stats'),
+              _StatRow(label: 'Ring 0', value: '${endStats.ringCounts[0]}'),
+              _StatRow(label: 'Ring 1', value: '${endStats.ringCounts[1]}'),
+              _StatRow(label: 'Ring 2', value: '${endStats.ringCounts[2]}'),
+              _StatRow(label: 'Ring 3', value: '${endStats.ringCounts[3]}'),
+              _StatRow(label: 'Ring 4', value: '${endStats.ringCounts[4]}'),
+              const Divider(),
+              _StatRow(label: 'Wood', value: '${endStats.wood}'),
+              const Divider(),
+              _StatRow(
+                label: 'Arya shots',
+                value: '${endStats.perPlayerShots['p1'] ?? 0}',
+              ),
+              _StatRow(
+                label: 'Rohit shots',
+                value: '${endStats.perPlayerShots['p2'] ?? 0}',
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
 
+/* Cards & bits */
+class _Card extends StatelessWidget {
+  const _Card({required this.child});
+  final Widget child;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF121A16)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: child,
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.text);
+  final String text;
+  @override
+  Widget build(BuildContext context) => Text(
+    text,
+    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+  );
+}
+
+class _StatRow extends StatelessWidget {
+  const _StatRow({required this.label, required this.value});
+  final String label;
+  final String value;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: Theme.of(context).textTheme.bodySmall?.color,
+            ),
+          ),
+        ),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.w800)),
+      ],
+    ),
+  );
+}
+
+class _RoundIconButton extends StatelessWidget {
+  const _RoundIconButton({required this.icon, required this.onPressed});
+  final IconData icon;
+  final VoidCallback onPressed;
+  @override
+  Widget build(BuildContext context) => InkResponse(
+    onTap: onPressed,
+    radius: 24,
+    child: Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.18)),
+      ),
+      child: Icon(icon),
+    ),
+  );
+}
+
+/* Player toggles */
 class _PlayerToggle extends StatelessWidget {
   const _PlayerToggle({
     required this.players,
     required this.selectedId,
     required this.onChanged,
   });
-  final List<PlayerData> players;
+  final List<Player> players;
   final String selectedId;
   final ValueChanged<String> onChanged;
 
@@ -401,70 +769,109 @@ class _PlayerToggle extends StatelessWidget {
   }
 }
 
-class _LegendDot extends StatelessWidget {
-  const _LegendDot({required this.color, required this.label});
-  final Color color;
-  final String label;
+class _PlayerToggleDesktop extends StatelessWidget {
+  const _PlayerToggleDesktop({
+    required this.players,
+    required this.selectedId,
+    required this.onChanged,
+  });
+  final List<Player> players;
+  final String selectedId;
+  final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) {
     return Row(
-      children: [
-        Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
+      children: players.map((p) {
+        final selected = p.id == selectedId;
+        return Expanded(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            child: ElevatedButton(
+              onPressed: () => onChanged(p.id),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: selected
+                    ? p.color
+                    : Colors.white.withOpacity(0.08),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: Text(
+                p.name,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
           ),
-        ),
-      ],
+        );
+      }).toList(),
     );
   }
 }
 
-class _RecentChips extends StatelessWidget {
-  const _RecentChips({required this.values});
-  final List<String> values;
+class _LegendRow extends StatelessWidget {
+  const _LegendRow({required this.players});
+  final List<Player> players;
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: players
+        .map(
+          (p) => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Row(
+              children: [
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: p.color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  p.name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        )
+        .toList(),
+  );
+}
 
-  static const Color g2 = _MatWoodScreenState.g2;
-  static const Color g3 = _MatWoodScreenState.g3;
-
+/* Pills & Buttons */
+class _GlassPill extends StatelessWidget {
+  const _GlassPill({required this.child});
+  final Widget child;
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: values.take(10).map((v) {
-          final isWood = v.toLowerCase() == 'wood';
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: isWood
-                    ? [g3.withOpacity(0.15), g2.withOpacity(0.20)]
-                    : [g2.withOpacity(0.20), g2.withOpacity(0.32)],
-              ),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: g2.withOpacity(0.45)),
-            ),
-            child: Text(
-              isWood ? 'Wood' : v,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
-            ),
-          );
-        }).toList(),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.black.withOpacity(0.25),
+            Colors.black.withOpacity(0.15),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.24)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.25),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
+        ],
       ),
+      child: ClipRRect(borderRadius: BorderRadius.circular(16), child: child),
     );
   }
 }
@@ -480,7 +887,6 @@ class _FrostedButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color? tint;
-
   @override
   Widget build(BuildContext context) {
     final c = tint ?? Colors.white;
@@ -516,7 +922,6 @@ class _SolidButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
-
   @override
   Widget build(BuildContext context) {
     return ElevatedButton.icon(
@@ -541,74 +946,184 @@ class _SolidButton extends StatelessWidget {
   }
 }
 
-/* ===================== FULL-SCREEN CANVAS ===================== */
-
-class _TapCanvas extends StatefulWidget {
-  const _TapCanvas({
-    required this.lastTapLocal,
-    required this.ripple,
-    required this.selectedPlayerId,
-    required this.shotsByPlayer,
-    required this.playerColors,
-    required this.onTapResolved,
+class _EndChip extends StatelessWidget {
+  const _EndChip({
+    required this.label,
+    required this.value,
+    required this.onPrev,
+    required this.onNext,
   });
-
-  final Offset? lastTapLocal;
-  final Animation<double> ripple;
-  final String selectedPlayerId;
-  final Map<String, List<Shot>> shotsByPlayer;
-  final Map<String, Color> playerColors;
-  final void Function(Offset localPos, Size canvasSize) onTapResolved;
-
+  final String label;
+  final String value;
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
   @override
-  State<_TapCanvas> createState() => _TapCanvasState();
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      IconButton(
+        onPressed: onPrev,
+        icon: const Icon(CupertinoIcons.chevron_left),
+        color: Colors.white,
+      ),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white.withOpacity(0.25)),
+        ),
+        child: Row(
+          children: [
+            Text(label, style: const TextStyle(color: Colors.white70)),
+            const SizedBox(width: 6),
+            Text(
+              value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+      IconButton(
+        onPressed: onNext,
+        icon: const Icon(CupertinoIcons.chevron_right),
+        color: Colors.white,
+      ),
+    ],
+  );
 }
 
-class _TapCanvasState extends State<_TapCanvas> {
-  // Fractions scaled to full-screen; outer ring at 0.90 of half-min
-  static const List<double> _fractions = [0.18, 0.36, 0.54, 0.72, 0.90];
+/* Recent row (mobile) */
+class _RecentRow extends StatelessWidget {
+  const _RecentRow({required this.shots});
+  final List<Shot> shots;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: (d) => widget.onTapResolved(
-        d.localPosition,
-        context.size ?? const Size(0, 0),
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: shots.take(12).map((s) {
+          final isWood = s.value == 'Wood';
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: (isWood ? Colors.white : _MatWoodScreenState.g2)
+                  .withOpacity(0.18),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white.withOpacity(0.25)),
+            ),
+            child: Text(
+              isWood ? 'W' : s.value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          );
+        }).toList(),
       ),
-      child: AnimatedBuilder(
-        animation: widget.ripple,
-        builder: (_, __) => CustomPaint(
-          painter: _FullScreenRingsPainter(
-            fractions: _fractions,
-            lastTap: widget.lastTapLocal,
-            rippleValue: widget.ripple.value,
-            selectedPlayerId: widget.selectedPlayerId,
-            shotsByPlayer: widget.shotsByPlayer,
-            playerColors: widget.playerColors,
-          ),
+    );
+  }
+}
+
+/* ===================== CANVAS ===================== */
+
+class _CanvasArea extends StatefulWidget {
+  const _CanvasArea({
+    required this.lastTapLocal,
+    required this.hoverLocal,
+    required this.ripple,
+    required this.currentEnd,
+    required this.shots,
+    required this.players,
+    required this.selectedPlayerId,
+    required this.outerFraction,
+    required this.onTapResolved,
+    required this.onHover,
+  });
+
+  final Offset? lastTapLocal;
+  final Offset? hoverLocal;
+  final Animation<double> ripple;
+  final int currentEnd;
+  final Map<int, Map<String, List<Shot>>> shots;
+  final List<Player> players;
+  final String selectedPlayerId;
+  final double outerFraction;
+  final void Function(Offset localPos, Size canvasSize) onTapResolved;
+  final ValueChanged<Offset?> onHover;
+
+  @override
+  State<_CanvasArea> createState() => _CanvasAreaState();
+}
+
+class _CanvasAreaState extends State<_CanvasArea> {
+  static const List<double> baseFractions = [
+    0.18,
+    0.36,
+    0.54,
+    0.72,
+  ]; // last is outerFraction
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onHover: (e) => widget.onHover(e.localPosition),
+      onExit: (_) => widget.onHover(null),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (d) => widget.onTapResolved(
+          d.localPosition,
+          context.size ?? const Size(0, 0),
+        ),
+        child: AnimatedBuilder(
+          animation: widget.ripple,
+          builder: (_, __) {
+            return CustomPaint(
+              painter: _RingsPainter(
+                lastTap: widget.lastTapLocal,
+                hover: widget.hoverLocal,
+                rippleValue: widget.ripple.value,
+                currentEnd: widget.currentEnd,
+                shots: widget.shots,
+                players: widget.players,
+                selectedPlayerId: widget.selectedPlayerId,
+                outerFraction: widget.outerFraction,
+              ),
+            );
+          },
         ),
       ),
     );
   }
 }
 
-class _FullScreenRingsPainter extends CustomPainter {
-  _FullScreenRingsPainter({
-    required this.fractions,
+class _RingsPainter extends CustomPainter {
+  _RingsPainter({
     required this.lastTap,
+    required this.hover,
     required this.rippleValue,
+    required this.currentEnd,
+    required this.shots,
+    required this.players,
     required this.selectedPlayerId,
-    required this.shotsByPlayer,
-    required this.playerColors,
+    required this.outerFraction,
   });
 
-  final List<double> fractions;
   final Offset? lastTap;
+  final Offset? hover;
   final double rippleValue;
+  final int currentEnd;
+  final Map<int, Map<String, List<Shot>>> shots;
+  final List<Player> players;
   final String selectedPlayerId;
-  final Map<String, List<Shot>> shotsByPlayer;
-  final Map<String, Color> playerColors;
+  final double outerFraction;
 
   static const Color g1 = _MatWoodScreenState.g1;
   static const Color g2 = _MatWoodScreenState.g2;
@@ -620,7 +1135,7 @@ class _FullScreenRingsPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final halfMin = math.min(size.width, size.height) / 2;
 
-    // Background gradient + soft vignette
+    // Background gradient
     final bgPaint = Paint()
       ..shader = const LinearGradient(
         begin: Alignment.topCenter,
@@ -629,7 +1144,7 @@ class _FullScreenRingsPainter extends CustomPainter {
       ).createShader(Offset.zero & size);
     canvas.drawRect(Offset.zero & size, bgPaint);
 
-    // Radial inner glow
+    // Inner glow
     final glowPaint = Paint()
       ..shader = RadialGradient(
         colors: [g2.withOpacity(0.20), Colors.transparent],
@@ -638,21 +1153,22 @@ class _FullScreenRingsPainter extends CustomPainter {
     canvas.drawCircle(center, halfMin * 0.95, glowPaint);
 
     // Rings
+    final rings = [0.18, 0.36, 0.54, 0.72, outerFraction];
     final ringColors = [g3, g2, g1, g4, g2];
-    for (int i = 0; i < fractions.length; i++) {
-      final r = fractions[i] * halfMin;
+    for (int i = 0; i < rings.length; i++) {
+      final r = rings[i] * halfMin;
       final ring = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = math.max(2.5, size.shortestSide * 0.006)
         ..color = ringColors[i].withOpacity(
-          i == fractions.length - 1 ? 0.95 : 0.85,
+          i == rings.length - 1 ? 0.95 : 0.85,
         );
       canvas.drawCircle(center, r, ring);
     }
 
-    // Labels 0..4 on right
-    for (int i = 0; i < fractions.length; i++) {
-      final r = fractions[i] * halfMin;
+    // Labels
+    for (int i = 0; i < rings.length; i++) {
+      final r = rings[i] * halfMin;
       final pos = center + Offset(r + 10, 0);
       _drawText(
         canvas,
@@ -663,44 +1179,51 @@ class _FullScreenRingsPainter extends CustomPainter {
       );
     }
 
-    // Draw persisted shots for both players
-    for (final entry in shotsByPlayer.entries) {
-      final pid = entry.key;
-      final shots = entry.value;
-      if (shots.isEmpty) continue;
+    // Previous ends (faint)
+    for (final entry in shots.entries) {
+      final end = entry.key;
+      if (end == currentEnd) continue;
+      final map = entry.value;
+      _drawShots(
+        canvas,
+        size,
+        map,
+        players,
+        opacity: 0.18,
+        labelBg: Colors.black.withOpacity(0.18),
+      );
+    }
 
-      final baseColor = playerColors[pid] ?? Colors.white;
-      final isSelected = pid == selectedPlayerId;
-      final color = isSelected ? baseColor : baseColor.withOpacity(0.55);
+    // Current end (normal)
+    _drawShots(
+      canvas,
+      size,
+      shots[currentEnd] ?? {},
+      players,
+      opacity: 1.0,
+      labelBg: Colors.black.withOpacity(0.35),
+      selectedPlayerId: selectedPlayerId,
+    );
 
-      for (final s in shots) {
-        final pos = Offset(
-          s.normPos.dx * size.width,
-          s.normPos.dy * size.height,
-        );
+    // Hover preview (desktop)
+    if (hover != null) {
+      final dotPaint = Paint()..color = Colors.white.withOpacity(0.35);
+      canvas.drawCircle(
+        hover!,
+        math.max(5.0, size.shortestSide * 0.010),
+        dotPaint,
+      );
 
-        // Dot with outline for visibility
-        final dotRadius = math.max(4.0, size.shortestSide * 0.010);
-        final stroke = Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = math.max(2.0, size.shortestSide * 0.0035)
-          ..color = Colors.black.withOpacity(0.6);
-        final fill = Paint()..color = color;
-
-        canvas.drawCircle(pos, dotRadius, stroke);
-        canvas.drawCircle(pos, dotRadius - 1.5, fill);
-
-        // Label (0..4 or W)
-        final label = s.value.toLowerCase() == 'wood' ? 'W' : s.value;
-        _drawLabel(
-          canvas,
-          label,
-          pos + Offset(dotRadius + 4, -dotRadius - 2),
-          fg: Colors.white,
-          bg: Colors.black.withOpacity(0.35),
-          size: math.max(10, size.shortestSide * 0.028),
-        );
-      }
+      // Live value preview
+      final value = _previewClassify(hover!, size, outerFraction);
+      _drawLabel(
+        canvas,
+        value == 'Wood' ? 'W' : value,
+        hover! + const Offset(10, -18),
+        fg: Colors.white,
+        bg: Colors.black.withOpacity(0.30),
+        sizePx: math.max(12, size.shortestSide * 0.030),
+      );
     }
 
     // Last tap ripple
@@ -709,10 +1232,73 @@ class _FullScreenRingsPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = math.max(2, size.shortestSide * 0.004)
         ..color = g2.withOpacity((1 - rippleValue).clamp(0.0, 1.0));
-      final maxRipple = fractions.last * halfMin * 1.05;
+      final maxRipple = rings.last * halfMin * 1.05;
       final rippleRadius = 14 + maxRipple * rippleValue;
       canvas.drawCircle(lastTap!, rippleRadius, ripplePaint);
     }
+  }
+
+  void _drawShots(
+    Canvas canvas,
+    Size size,
+    Map<String, List<Shot>> map,
+    List<Player> players, {
+    required double opacity,
+    required Color labelBg,
+    String? selectedPlayerId,
+  }) {
+    final colorOf = {for (final p in players) p.id: p.color};
+    for (final e in map.entries) {
+      final pid = e.key;
+      final shots = e.value;
+      final base = (colorOf[pid] ?? Colors.white).withOpacity(opacity);
+      final selected = selectedPlayerId == null || selectedPlayerId == pid;
+      final boost = selected ? 1.0 : 0.65;
+      final color = base.withOpacity(base.opacity * boost);
+
+      for (final s in shots) {
+        final pos = Offset(
+          s.normPos.dx * size.width,
+          s.normPos.dy * size.height,
+        );
+        final dotR = math.max(4.5, size.shortestSide * 0.010);
+        final stroke = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = math.max(2.0, size.shortestSide * 0.0035)
+          ..color = Colors.black.withOpacity(0.55 * opacity);
+        final fill = Paint()..color = color;
+
+        canvas.drawCircle(pos, dotR, stroke);
+        canvas.drawCircle(pos, dotR - 1.6, fill);
+
+        final label = s.value == 'Wood' ? 'W' : s.value;
+        _drawLabel(
+          canvas,
+          label,
+          pos + Offset(dotR + 4, -dotR - 2),
+          fg: Colors.white.withOpacity(opacity),
+          bg: labelBg,
+          sizePx: math.max(10, size.shortestSide * 0.028),
+        );
+      }
+    }
+  }
+
+  String _previewClassify(Offset localPos, Size size, double outerFraction) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final r = (localPos - center).distance;
+    final halfMin = math.min(size.width, size.height) / 2;
+    final thresholds = [
+      0.18,
+      0.36,
+      0.54,
+      0.72,
+      outerFraction,
+    ].map((f) => f * halfMin).toList();
+    for (int i = 0; i < thresholds.length; i++) {
+      if (r <= thresholds[i]) return '$i';
+    }
+    return 'Wood';
   }
 
   void _drawText(
@@ -742,28 +1328,26 @@ class _FullScreenRingsPainter extends CustomPainter {
     Offset pos, {
     required Color fg,
     required Color bg,
-    required double size,
+    required double sizePx,
   }) {
     final tp = TextPainter(
       text: TextSpan(
         text: text,
         style: TextStyle(
           color: fg,
-          fontSize: size,
+          fontSize: sizePx,
           fontWeight: FontWeight.w800,
-          letterSpacing: 0.2,
         ),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-
-    final padding = 4.0;
+    final pad = 4.0;
     final rect = RRect.fromRectAndRadius(
       Rect.fromLTWH(
-        pos.dx - padding,
-        pos.dy - padding,
-        tp.width + padding * 2,
-        tp.height + padding * 2,
+        pos.dx - pad,
+        pos.dy - pad,
+        tp.width + pad * 2,
+        tp.height + pad * 2,
       ),
       const Radius.circular(6),
     );
@@ -773,23 +1357,29 @@ class _FullScreenRingsPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _FullScreenRingsPainter old) {
-    return old.lastTap != lastTap ||
-        old.rippleValue != rippleValue ||
-        old.fractions != fractions ||
-        old.selectedPlayerId != selectedPlayerId ||
-        !mapEquals(old.shotsByPlayer, shotsByPlayer);
+  bool shouldRepaint(covariant _RingsPainter old) {
+    return lastTap != old.lastTap ||
+        hover != old.hover ||
+        rippleValue != old.rippleValue ||
+        currentEnd != old.currentEnd ||
+        selectedPlayerId != old.selectedPlayerId ||
+        outerFraction != old.outerFraction ||
+        !_mapEquals(shots, old.shots);
   }
 
-  // shallow map compare (positions change -> new instances -> triggers repaint)
-  bool mapEquals(Map<String, List<Shot>> a, Map<String, List<Shot>> b) {
+  bool _mapEquals(
+    Map<int, Map<String, List<Shot>>> a,
+    Map<int, Map<String, List<Shot>>> b,
+  ) {
     if (a.length != b.length) return false;
     for (final k in a.keys) {
-      final la = a[k]!;
-      final lb = b[k]!;
-      if (la.length != lb.length) return false;
-      for (int i = 0; i < la.length; i++) {
-        if (la[i] != lb[i]) return false;
+      final aa = a[k]!;
+      final bb = b[k] ?? {};
+      if (aa.length != bb.length) return false;
+      for (final pk in aa.keys) {
+        final la = aa[pk]!;
+        final lb = bb[pk] ?? [];
+        if (la.length != lb.length) return false;
       }
     }
     return true;
