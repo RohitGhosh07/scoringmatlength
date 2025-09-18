@@ -1307,7 +1307,7 @@ class _RingsPainter extends CustomPainter {
         );
         final dotR = math.max(
           6.5,
-          size.shortestSide * 0.020,
+          size.shortestSide * 0.030,
         ); // Increased radius
         final stroke = Paint()
           ..style = PaintingStyle.stroke
