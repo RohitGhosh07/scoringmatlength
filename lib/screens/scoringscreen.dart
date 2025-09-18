@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1064,6 +1065,25 @@ class _CanvasArea extends StatefulWidget {
 }
 
 class _CanvasAreaState extends State<_CanvasArea> {
+  ui.Image? _jackImage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadJackImage();
+  }
+
+  Future<void> _loadJackImage() async {
+    try {
+      final data = await rootBundle.load('assets/images/jack.png');
+      final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+      final frame = await codec.getNextFrame();
+      setState(() => _jackImage = frame.image);
+    } catch (e) {
+      print('Error loading jack image: $e');
+    }
+  }
+
   static const List<double> baseFractions = [
     0.18,
     0.36,
@@ -1095,6 +1115,7 @@ class _CanvasAreaState extends State<_CanvasArea> {
                 players: widget.players,
                 selectedPlayerId: widget.selectedPlayerId,
                 outerFraction: widget.outerFraction,
+                jackImage: _jackImage,
               ),
             );
           },
@@ -1114,7 +1135,10 @@ class _RingsPainter extends CustomPainter {
     required this.players,
     required this.selectedPlayerId,
     required this.outerFraction,
+    this.jackImage,
   });
+
+  final ui.Image? jackImage;
 
   final Offset? lastTap;
   final Offset? hover;
@@ -1151,6 +1175,26 @@ class _RingsPainter extends CustomPainter {
         stops: const [0.0, 1.0],
       ).createShader(Rect.fromCircle(center: center, radius: halfMin * 0.95));
     canvas.drawCircle(center, halfMin * 0.95, glowPaint);
+
+    // Draw jack at center
+    if (jackImage != null) {
+      final jackSize = halfMin * 0.15; // Adjust size as needed
+      canvas.drawImageRect(
+        jackImage!,
+        Rect.fromLTWH(
+          0,
+          0,
+          jackImage!.width.toDouble(),
+          jackImage!.height.toDouble(),
+        ),
+        Rect.fromCenter(
+          center: center,
+          width: jackSize * 2,
+          height: jackSize * 2,
+        ),
+        Paint(),
+      );
+    }
 
     // Rings
     final rings = [0.18, 0.36, 0.54, 0.72, outerFraction];
@@ -1261,10 +1305,14 @@ class _RingsPainter extends CustomPainter {
           s.normPos.dx * size.width,
           s.normPos.dy * size.height,
         );
-        final dotR = math.max(4.5, size.shortestSide * 0.010);
+        final dotR = math.max(
+          6.5,
+          size.shortestSide * 0.020,
+        ); // Increased radius
         final stroke = Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = math.max(2.0, size.shortestSide * 0.0035)
+          ..strokeWidth = math
+              .max(2.5, size.shortestSide * 0.004) // Slightly thicker stroke
           ..color = Colors.black.withOpacity(0.55 * opacity);
         final fill = Paint()..color = color;
 
