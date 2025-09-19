@@ -1202,12 +1202,23 @@ class _RingsPainter extends CustomPainter {
     // Draw filled circles from outer to inner with gradient
     for (int i = rings.length - 1; i >= 0; i--) {
       final r = rings[i] * halfMin;
+      // Calculate darkness factor based on ring index (0 = center/lightest, 4 = outer/darkest)
+      final darknessFactor = i / (rings.length - 1);
+
       final circle = Paint()
         ..style = PaintingStyle.fill
         ..shader = RadialGradient(
           colors: [
-            Color(0xFF8EB25E), // Light green
-            Color(0xFF558B2F), // Dark green
+            HSLColor.fromColor(Color(0xFF30B082))
+                .withLightness(
+                  0.6 - (darknessFactor * 0.4),
+                ) // Progressively darker
+                .toColor(),
+            HSLColor.fromColor(Color(0xFF30B082))
+                .withLightness(
+                  0.4 - (darknessFactor * 0.3),
+                ) // Progressively darker
+                .toColor(),
           ],
           stops: const [0.0, 1.0],
           center: Alignment.center,
@@ -1224,6 +1235,35 @@ class _RingsPainter extends CustomPainter {
         ..strokeWidth = math.max(2.0, size.shortestSide * 0.004)
         ..color = Colors.white.withOpacity(0.3);
       canvas.drawCircle(center, r, ring);
+    }
+
+    // Draw jack at center first so shots appear on top of it
+    if (jackImage != null) {
+      // Set jack size to fit within the innermost ring (ring 0 which is 18% of halfMin)
+      final jackSize =
+          halfMin * 0.16; // Slightly smaller than the innermost ring
+      canvas.drawImageRect(
+        jackImage!,
+        Rect.fromLTWH(
+          0,
+          0,
+          jackImage!.width.toDouble(),
+          jackImage!.height.toDouble(),
+        ),
+        Rect.fromCenter(
+          center: center,
+          width: jackSize * 2,
+          height: jackSize * 2,
+        ),
+        Paint()
+          ..filterQuality = ui
+              .FilterQuality
+              .medium // Improve image quality
+          ..colorFilter = const ColorFilter.mode(
+            Colors.white,
+            BlendMode.modulate,
+          ), // Make the image more visible
+      );
     }
 
     // Previous ends (faint)
@@ -1282,35 +1322,6 @@ class _RingsPainter extends CustomPainter {
       final maxRipple = rings.last * halfMin * 1.05;
       final rippleRadius = 14 + maxRipple * rippleValue;
       canvas.drawCircle(lastTap!, rippleRadius, ripplePaint);
-    }
-
-    // Draw jack at center - draw last so it appears on top of everything
-    if (jackImage != null) {
-      // Set jack size to fit within the innermost ring (ring 0 which is 18% of halfMin)
-      final jackSize =
-          halfMin * 0.16; // Slightly smaller than the innermost ring
-      canvas.drawImageRect(
-        jackImage!,
-        Rect.fromLTWH(
-          0,
-          0,
-          jackImage!.width.toDouble(),
-          jackImage!.height.toDouble(),
-        ),
-        Rect.fromCenter(
-          center: center,
-          width: jackSize * 2,
-          height: jackSize * 2,
-        ),
-        Paint()
-          ..filterQuality = ui
-              .FilterQuality
-              .medium // Improve image quality
-          ..colorFilter = const ColorFilter.mode(
-            Colors.white,
-            BlendMode.modulate,
-          ), // Make the image more visible
-      );
     }
   }
 
