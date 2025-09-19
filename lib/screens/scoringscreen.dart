@@ -1227,15 +1227,7 @@ class _RingsPainter extends CustomPainter {
       canvas.drawCircle(center, r, circle);
     }
 
-    // Draw ring borders for definition
-    for (int i = 0; i < rings.length; i++) {
-      final r = rings[i] * halfMin;
-      final ring = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = math.max(2.0, size.shortestSide * 0.004)
-        ..color = Colors.white.withOpacity(0.3);
-      canvas.drawCircle(center, r, ring);
-    }
+    // Ring borders removed as per user request
 
     // Draw jack at center first so shots appear on top of it
     if (jackImage != null) {
