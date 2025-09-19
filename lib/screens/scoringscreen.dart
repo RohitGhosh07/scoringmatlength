@@ -4,13 +4,13 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-class MatWoodScreen extends StatefulWidget {
-  const MatWoodScreen({super.key});
+class MatDitchScreen extends StatefulWidget {
+  const MatDitchScreen({super.key});
   @override
-  State<MatWoodScreen> createState() => _MatWoodScreenState();
+  State<MatDitchScreen> createState() => _MatDitchScreenState();
 }
 
-class _MatWoodScreenState extends State<MatWoodScreen>
+class _MatDitchScreenState extends State<MatDitchScreen>
     with TickerProviderStateMixin {
   // Chrome colors
   static const Color g2 = Color(0xFF30B082);
@@ -73,7 +73,9 @@ class _MatWoodScreenState extends State<MatWoodScreen>
       _playerShots(_selectedPlayerId).add(shot);
     });
 
-    final msg = value == 'Wood' ? 'Wood recorded' : 'Mat length set to $value';
+    final msg = value == 'Ditch'
+        ? 'Ditch recorded'
+        : 'Mat length set to $value';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('End $_currentEnd • ${_selected.name}: $msg'),
@@ -146,7 +148,7 @@ class _MatWoodScreenState extends State<MatWoodScreen>
     for (int i = 0; i < thresholds.length; i++) {
       if (r <= thresholds[i]) return '$i';
     }
-    return 'Wood';
+    return 'Ditch';
   }
 
   /* -------------------- Desktop Shortcuts -------------------- */
@@ -376,7 +378,7 @@ class _MatWoodScreenState extends State<MatWoodScreen>
       for (final player in _players) {
         final shots = end.value[player.id] ?? [];
         for (final shot in shots) {
-          if (shot.value != 'Wood') {
+          if (shot.value != 'Ditch') {
             scores[player.id] =
                 (scores[player.id] ?? 0) + (4 - int.parse(shot.value));
           }
@@ -395,7 +397,7 @@ class _MatWoodScreenState extends State<MatWoodScreen>
     for (final entry in map.entries) {
       perPlayer[entry.key] = entry.value.length;
       for (final s in entry.value) {
-        if (s.value == 'Wood') {
+        if (s.value == 'Ditch') {
           wood++;
         } else {
           final idx = int.tryParse(s.value) ?? -1;
@@ -463,7 +465,7 @@ class _MatWoodScreenState extends State<MatWoodScreen>
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Tip: Larger outer ring makes “Wood” area smaller. Keep between 80–95% of half-min.',
+                    'Tip: Larger outer ring makes “Ditch” area smaller. Keep between 80–95% of half-min.',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.7),
                       fontSize: 12,
@@ -638,7 +640,7 @@ class Player {
 class Shot {
   final String playerId;
   final Offset normPos; // [0..1] x [0..1]
-  final String value; // '0'..'4' or 'Wood'
+  final String value; // '0'..'4' or 'Ditch'
   final int end;
   const Shot({
     required this.playerId,
@@ -762,7 +764,7 @@ class _ControlPanel extends StatelessWidget {
                 icon: const Icon(CupertinoIcons.check_mark_circled_solid),
                 label: const Text('Save'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _MatWoodScreenState.g2,
+                  backgroundColor: _MatDitchScreenState.g2,
                   foregroundColor: Colors.white,
                 ),
               ),
@@ -787,7 +789,7 @@ class _ControlPanel extends StatelessWidget {
               _StatRow(label: 'Ring 3', value: '${endStats.ringCounts[3]}'),
               _StatRow(label: 'Ring 4', value: '${endStats.ringCounts[4]}'),
               const Divider(),
-              _StatRow(label: 'Wood', value: '${endStats.wood}'),
+              _StatRow(label: 'Ditch', value: '${endStats.wood}'),
               const Divider(),
               _StatRow(
                 label: 'Arya shots',
@@ -1007,9 +1009,23 @@ class _PlayerToggleDesktop extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: Text(
-                p.name,
-                style: const TextStyle(fontWeight: FontWeight.w800),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: p.color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    p.name,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1134,17 +1150,17 @@ class _RecentRow extends StatelessWidget {
         spacing: 8,
         runSpacing: 8,
         children: shots.take(12).map((s) {
-          final isWood = s.value == 'Wood';
+          final isDitch = s.value == 'D';
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: (isWood ? Colors.white : _MatWoodScreenState.g2)
+              color: (isDitch ? Colors.white : _MatDitchScreenState.g2)
                   .withOpacity(0.18),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: Colors.white.withOpacity(0.25)),
             ),
             child: Text(
-              isWood ? 'W' : s.value,
+              isDitch ? 'D' : s.value,
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w800,
@@ -1309,7 +1325,7 @@ class _RingsPainter extends CustomPainter {
   final String selectedPlayerId;
   final double outerFraction;
 
-  static const Color g2 = _MatWoodScreenState.g2;
+  static const Color g2 = _MatDitchScreenState.g2;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1434,7 +1450,7 @@ class _RingsPainter extends CustomPainter {
       final value = _previewClassify(hover!, size, outerFraction);
       _drawLabel(
         canvas,
-        value == 'Wood' ? 'W' : value,
+        value == 'Ditch' ? 'D' : value,
         hover! + const Offset(10, -18),
         fg: Colors.white,
         bg: Colors.black.withOpacity(0.30),
@@ -1492,7 +1508,7 @@ class _RingsPainter extends CustomPainter {
         canvas.drawCircle(pos, dotR, stroke);
         canvas.drawCircle(pos, dotR - 1.6, fill);
 
-        final label = s.value == 'Wood' ? 'W' : '${i + 1}';
+        final label = s.value == 'Ditch' ? 'D' : '${i + 1}';
         _drawLabelInsideCircle(
           canvas,
           label,
@@ -1518,7 +1534,7 @@ class _RingsPainter extends CustomPainter {
     for (int i = 0; i < thresholds.length; i++) {
       if (r <= thresholds[i]) return '$i';
     }
-    return 'Wood';
+    return 'Ditch';
   }
 
   void _drawLabel(
