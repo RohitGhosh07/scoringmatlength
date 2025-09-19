@@ -13,10 +13,7 @@ class MatWoodScreen extends StatefulWidget {
 class _MatWoodScreenState extends State<MatWoodScreen>
     with TickerProviderStateMixin {
   // Chrome colors
-  static const Color g1 = Color(0xFF148D61);
   static const Color g2 = Color(0xFF30B082);
-  static const Color g3 = Color(0xFF67C196);
-  static const Color g4 = Color(0xFF17875F);
 
   // Player dot colors
   static const Color p1Dot = Color(0xFF5BE7C4); // Arya
@@ -330,7 +327,7 @@ class _MatWoodScreenState extends State<MatWoodScreen>
                                       onPressed: _undo,
                                       icon: CupertinoIcons.arrow_uturn_left,
                                       label: 'Undo',
-                                      tint: g3,
+                                      tint: g2,
                                     ),
                                   ),
                                   const SizedBox(width: 10),
@@ -731,9 +728,22 @@ class _PlayerToggle extends StatelessWidget {
     return Container(
       height: 44,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        gradient: LinearGradient(
+          colors: [
+            Colors.black.withOpacity(0.4),
+            Colors.black.withOpacity(0.2),
+          ],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.24)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: players.map((p) {
@@ -743,10 +753,17 @@ class _PlayerToggle extends StatelessWidget {
               duration: const Duration(milliseconds: 220),
               curve: Curves.easeOut,
               decoration: BoxDecoration(
-                color: selected
-                    ? Colors.white.withOpacity(0.20)
-                    : Colors.transparent,
+                color: selected ? p.color.withOpacity(0.3) : Colors.transparent,
                 borderRadius: BorderRadius.circular(10),
+                boxShadow: selected
+                    ? [
+                        BoxShadow(
+                          color: p.color.withOpacity(0.3),
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        ),
+                      ]
+                    : null,
               ),
               child: InkWell(
                 borderRadius: BorderRadius.circular(10),
@@ -828,16 +845,26 @@ class _LegendRow extends StatelessWidget {
                   width: 12,
                   height: 12,
                   decoration: BoxDecoration(
-                    color: p.color,
+                    color: p.color.withOpacity(0.9),
                     shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: p.color.withOpacity(0.5),
+                        blurRadius: 6,
+                        spreadRadius: 1,
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 Text(
                   p.name,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w600,
+                    shadows: [
+                      Shadow(color: p.color.withOpacity(0.6), blurRadius: 8),
+                    ],
                   ),
                 ),
               ],
@@ -857,18 +884,21 @@ class _GlassPill extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
           colors: [
-            Colors.black.withOpacity(0.25),
-            Colors.black.withOpacity(0.15),
+            Colors.white.withOpacity(0.15),
+            Colors.white.withOpacity(0.05),
           ],
         ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.24)),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.2), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.25),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 32,
+            offset: const Offset(0, 16),
+            spreadRadius: -8,
           ),
         ],
       ),
@@ -1084,13 +1114,6 @@ class _CanvasAreaState extends State<_CanvasArea> {
     }
   }
 
-  static const List<double> baseFractions = [
-    0.18,
-    0.36,
-    0.54,
-    0.72,
-  ]; // last is outerFraction
-
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
@@ -1149,10 +1172,7 @@ class _RingsPainter extends CustomPainter {
   final String selectedPlayerId;
   final double outerFraction;
 
-  static const Color g1 = _MatWoodScreenState.g1;
   static const Color g2 = _MatWoodScreenState.g2;
-  static const Color g3 = _MatWoodScreenState.g3;
-  static const Color g4 = _MatWoodScreenState.g4;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1176,52 +1196,35 @@ class _RingsPainter extends CustomPainter {
       ).createShader(Rect.fromCircle(center: center, radius: halfMin * 0.95));
     canvas.drawCircle(center, halfMin * 0.95, glowPaint);
 
-    // Draw jack at center
-    if (jackImage != null) {
-      final jackSize = halfMin * 0.15; // Adjust size as needed
-      canvas.drawImageRect(
-        jackImage!,
-        Rect.fromLTWH(
-          0,
-          0,
-          jackImage!.width.toDouble(),
-          jackImage!.height.toDouble(),
-        ),
-        Rect.fromCenter(
-          center: center,
-          width: jackSize * 2,
-          height: jackSize * 2,
-        ),
-        Paint(),
-      );
+    // Rings with lawn-like gradient
+    final rings = [0.18, 0.36, 0.54, 0.72, outerFraction];
+
+    // Draw filled circles from outer to inner with gradient
+    for (int i = rings.length - 1; i >= 0; i--) {
+      final r = rings[i] * halfMin;
+      final circle = Paint()
+        ..style = PaintingStyle.fill
+        ..shader = RadialGradient(
+          colors: [
+            Color(0xFF8EB25E), // Light green
+            Color(0xFF558B2F), // Dark green
+          ],
+          stops: const [0.0, 1.0],
+          center: Alignment.center,
+        ).createShader(Rect.fromCircle(center: center, radius: r));
+
+      canvas.drawCircle(center, r, circle);
     }
 
-    // Rings
-    final rings = [0.18, 0.36, 0.54, 0.72, outerFraction];
-    final ringColors = [g3, g2, g1, g4, g2];
+    // Draw ring borders for definition
     for (int i = 0; i < rings.length; i++) {
       final r = rings[i] * halfMin;
       final ring = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = math.max(2.5, size.shortestSide * 0.006)
-        ..color = ringColors[i].withOpacity(
-          i == rings.length - 1 ? 0.95 : 0.85,
-        );
+        ..strokeWidth = math.max(2.0, size.shortestSide * 0.004)
+        ..color = Colors.white.withOpacity(0.3);
       canvas.drawCircle(center, r, ring);
     }
-
-    // // Labels
-    // for (int i = 0; i < rings.length; i++) {
-    //   final r = rings[i] * halfMin;
-    //   final pos = center + Offset(r + 10, 0);
-    //   _drawText(
-    //     canvas,
-    //     '$i',
-    //     pos,
-    //     color: Colors.white.withOpacity(0.9),
-    //     fontSize: math.max(14, size.shortestSide * 0.035),
-    //   );
-    // }
 
     // Previous ends (faint)
     for (final entry in shots.entries) {
@@ -1280,6 +1283,35 @@ class _RingsPainter extends CustomPainter {
       final rippleRadius = 14 + maxRipple * rippleValue;
       canvas.drawCircle(lastTap!, rippleRadius, ripplePaint);
     }
+
+    // Draw jack at center - draw last so it appears on top of everything
+    if (jackImage != null) {
+      // Set jack size to fit within the innermost ring (ring 0 which is 18% of halfMin)
+      final jackSize =
+          halfMin * 0.16; // Slightly smaller than the innermost ring
+      canvas.drawImageRect(
+        jackImage!,
+        Rect.fromLTWH(
+          0,
+          0,
+          jackImage!.width.toDouble(),
+          jackImage!.height.toDouble(),
+        ),
+        Rect.fromCenter(
+          center: center,
+          width: jackSize * 2,
+          height: jackSize * 2,
+        ),
+        Paint()
+          ..filterQuality = ui
+              .FilterQuality
+              .medium // Improve image quality
+          ..colorFilter = const ColorFilter.mode(
+            Colors.white,
+            BlendMode.modulate,
+          ), // Make the image more visible
+      );
+    }
   }
 
   void _drawShots(
@@ -1300,7 +1332,8 @@ class _RingsPainter extends CustomPainter {
       final boost = selected ? 1.0 : 0.65;
       final color = base.withOpacity(base.opacity * boost);
 
-      for (final s in shots) {
+      for (var i = 0; i < shots.length; i++) {
+        final s = shots[i];
         final pos = Offset(
           s.normPos.dx * size.width,
           s.normPos.dy * size.height,
@@ -1319,14 +1352,13 @@ class _RingsPainter extends CustomPainter {
         canvas.drawCircle(pos, dotR, stroke);
         canvas.drawCircle(pos, dotR - 1.6, fill);
 
-        final label = s.value == 'Wood' ? 'W' : s.value;
-        _drawLabel(
+        final label = s.value == 'Wood' ? 'W' : '${i + 1}';
+        _drawLabelInsideCircle(
           canvas,
           label,
-          pos + Offset(dotR + 4, -dotR - 2),
-          fg: Colors.white.withOpacity(opacity),
-          bg: labelBg,
-          sizePx: math.max(10, size.shortestSide * 0.028),
+          pos,
+          dotR,
+          sizePx: math.min(math.max(10, size.shortestSide * 0.028), dotR * 0.9),
         );
       }
     }
@@ -1347,27 +1379,6 @@ class _RingsPainter extends CustomPainter {
       if (r <= thresholds[i]) return '$i';
     }
     return 'Wood';
-  }
-
-  void _drawText(
-    Canvas canvas,
-    String text,
-    Offset pos, {
-    Color color = Colors.white,
-    double fontSize = 16,
-  }) {
-    final tp = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(
-          color: color,
-          fontSize: fontSize,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tp.paint(canvas, Offset(pos.dx, pos.dy - tp.height / 2));
   }
 
   void _drawLabel(
@@ -1432,4 +1443,27 @@ class _RingsPainter extends CustomPainter {
     }
     return true;
   }
+}
+
+void _drawLabelInsideCircle(
+  Canvas canvas,
+  String text,
+  Offset center,
+  double radius, {
+  required double sizePx,
+}) {
+  final tp = TextPainter(
+    text: TextSpan(
+      text: text,
+      style: TextStyle(
+        color: Colors.black, // Always black for visibility
+        fontSize: sizePx,
+        fontWeight: FontWeight.w800,
+      ),
+    ),
+    textDirection: TextDirection.ltr,
+  )..layout();
+
+  final pos = center - Offset(tp.width / 2, tp.height / 2);
+  tp.paint(canvas, pos);
 }
