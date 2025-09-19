@@ -246,58 +246,70 @@ class _MatWoodScreenState extends State<MatWoodScreen>
                 children: [
                   Positioned.fill(child: canvas),
 
-                  // Top: player + end mini bar
+                  // Top: player + end mini bar (refactored)
                   SafeArea(
                     minimum: const EdgeInsets.fromLTRB(12, 10, 12, 0),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _GlassPill(
-                          child: Row(
-                            children: [
-                              IconButton(
-                                onPressed: () => Navigator.maybePop(context),
-                                icon: const Icon(CupertinoIcons.chevron_back),
-                                color: Colors.white,
-                                tooltip: 'Back',
-                              ),
-                              Expanded(
-                                child: _PlayerToggle(
-                                  players: _players,
-                                  selectedId: _selectedPlayerId,
-                                  onChanged: _switchPlayer,
-                                ),
-                              ),
-                              IconButton(
-                                onPressed: () => _openSettingsSheet(context),
-                                icon: const Icon(
-                                  CupertinoIcons.slider_horizontal_3,
-                                ),
-                                color: Colors.white,
-                                tooltip: 'Settings',
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 8),
+                        // Row 1: Back • PlayerToggle • Settings
                         _GlassPill(
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
+                              horizontal: 6,
+                              vertical: 4,
                             ),
                             child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                _EndChip(
-                                  label: 'End',
-                                  value: '$_currentEnd',
-                                  onPrev: _prevEnd,
-                                  onNext: _nextEnd,
+                                _CompactIconButton(
+                                  onPressed: () => Navigator.maybePop(context),
+                                  icon: CupertinoIcons.chevron_back,
+                                  tooltip: 'Back',
                                 ),
-                                const SizedBox(width: 8),
-                                _LegendRow(players: _players),
+
+                                const SizedBox(width: 6),
+
+                                // Flexible PlayerToggle so it never overflows
+                                Expanded(
+                                  child: AnimatedSize(
+                                    duration: const Duration(milliseconds: 180),
+                                    curve: Curves.easeOut,
+                                    child: _PlayerToggle(
+                                      players: _players,
+                                      selectedId: _selectedPlayerId,
+                                      onChanged: _switchPlayer,
+                                      scores: _computeScores(),
+                                    ),
+                                  ),
+                                ),
+
+                                const SizedBox(width: 6),
+
+                                _CompactIconButton(
+                                  onPressed: () => _openSettingsSheet(context),
+                                  icon: CupertinoIcons.slider_horizontal_3,
+                                  tooltip: 'Settings',
+                                ),
                               ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        // Row 2: End selector (centered). Kept inside its own pill for clarity.
+                        _GlassPill(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 6,
+                            ),
+                            child: Center(
+                              child: _EndSelectorPill(
+                                currentEnd: _currentEnd,
+                                onPrev: _prevEnd,
+                                onNext: _nextEnd,
+                              ),
                             ),
                           ),
                         ),
@@ -358,6 +370,22 @@ class _MatWoodScreenState extends State<MatWoodScreen>
   }
 
   /* -------------------- Stats -------------------- */
+  Map<String, int> _computeScores() {
+    final scores = <String, int>{'p1': 0, 'p2': 0};
+    for (final end in _shots.entries) {
+      for (final player in _players) {
+        final shots = end.value[player.id] ?? [];
+        for (final shot in shots) {
+          if (shot.value != 'Wood') {
+            scores[player.id] =
+                (scores[player.id] ?? 0) + (4 - int.parse(shot.value));
+          }
+        }
+      }
+    }
+    return scores;
+  }
+
   EndStats _computeStatsForEnd(int end) {
     final map = _shots[end] ?? {'p1': [], 'p2': []};
     int wood = 0;
@@ -449,6 +477,152 @@ class _MatWoodScreenState extends State<MatWoodScreen>
         );
       },
     ).whenComplete(() => setState(() {}));
+  }
+}
+
+class _CompactIconButton extends StatelessWidget {
+  const _CompactIconButton({
+    super.key,
+    required this.onPressed,
+    required this.icon,
+    this.tooltip,
+    this.color = Colors.white,
+  });
+
+  final VoidCallback onPressed;
+  final IconData icon;
+  final String? tooltip;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: onPressed,
+      tooltip: tooltip,
+      icon: Icon(icon, size: 20),
+      color: color,
+      style: IconButton.styleFrom(
+        padding: const EdgeInsets.all(8),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        minimumSize: const Size(36, 36),
+      ),
+      visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
+class _EndSelectorPill extends StatelessWidget {
+  const _EndSelectorPill({
+    super.key,
+    required this.currentEnd,
+    required this.onPrev,
+    required this.onNext,
+  });
+
+  final int currentEnd;
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    // Subtle glass-like micro pill with chevrons and a center badge
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _MiniGlassButton(
+          icon: CupertinoIcons.chevron_left,
+          onTap: onPrev,
+          tooltip: 'Previous End',
+        ),
+        const SizedBox(width: 8),
+        _EndBadge(value: currentEnd),
+        const SizedBox(width: 8),
+        _MiniGlassButton(
+          icon: CupertinoIcons.chevron_right,
+          onTap: onNext,
+          tooltip: 'Next End',
+        ),
+      ],
+    );
+  }
+}
+
+class _MiniGlassButton extends StatelessWidget {
+  const _MiniGlassButton({
+    super.key,
+    required this.icon,
+    required this.onTap,
+    this.tooltip,
+  });
+
+  final IconData icon;
+  final VoidCallback onTap;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip ?? '',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            // Match your glass style: light border + translucent fill
+            color: Colors.white.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white.withOpacity(0.12)),
+          ),
+          child: Icon(icon, size: 18, color: Colors.white),
+        ),
+      ),
+    );
+  }
+}
+
+class _EndBadge extends StatelessWidget {
+  const _EndBadge({super.key, required this.value});
+  final int value;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 200),
+      transitionBuilder: (child, anim) => ScaleTransition(
+        scale: CurvedAnimation(parent: anim, curve: Curves.easeOut),
+        child: child,
+      ),
+      child: Container(
+        key: ValueKey(value),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withOpacity(0.14)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              CupertinoIcons.circle_grid_3x3,
+              size: 14,
+              color: Colors.white70,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'End $value',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 13.5,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -718,10 +892,12 @@ class _PlayerToggle extends StatelessWidget {
     required this.players,
     required this.selectedId,
     required this.onChanged,
+    required this.scores,
   });
   final List<Player> players;
   final String selectedId;
   final ValueChanged<String> onChanged;
+  final Map<String, int> scores;
 
   @override
   Widget build(BuildContext context) {
@@ -768,15 +944,29 @@ class _PlayerToggle extends StatelessWidget {
               child: InkWell(
                 borderRadius: BorderRadius.circular(10),
                 onTap: () => onChanged(p.id),
-                child: Center(
-                  child: Text(
-                    p.name,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                      letterSpacing: 0.2,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      p.name,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: selected
+                            ? FontWeight.w800
+                            : FontWeight.w600,
+                        letterSpacing: 0.2,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${scores[p.id] ?? 0}',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -827,52 +1017,6 @@ class _PlayerToggleDesktop extends StatelessWidget {
       }).toList(),
     );
   }
-}
-
-class _LegendRow extends StatelessWidget {
-  const _LegendRow({required this.players});
-  final List<Player> players;
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: players
-        .map(
-          (p) => Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: Row(
-              children: [
-                Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: p.color.withOpacity(0.9),
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: p.color.withOpacity(0.5),
-                        blurRadius: 6,
-                        spreadRadius: 1,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  p.name,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    shadows: [
-                      Shadow(color: p.color.withOpacity(0.6), blurRadius: 8),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        )
-        .toList(),
-  );
 }
 
 /* Pills & Buttons */
@@ -977,56 +1121,6 @@ class _SolidButton extends StatelessWidget {
   }
 }
 
-class _EndChip extends StatelessWidget {
-  const _EndChip({
-    required this.label,
-    required this.value,
-    required this.onPrev,
-    required this.onNext,
-  });
-  final String label;
-  final String value;
-  final VoidCallback onPrev;
-  final VoidCallback onNext;
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      IconButton(
-        onPressed: onPrev,
-        icon: const Icon(CupertinoIcons.chevron_left),
-        color: Colors.white,
-      ),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white.withOpacity(0.25)),
-        ),
-        child: Row(
-          children: [
-            Text(label, style: const TextStyle(color: Colors.white70)),
-            const SizedBox(width: 6),
-            Text(
-              value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
-        ),
-      ),
-      IconButton(
-        onPressed: onNext,
-        icon: const Icon(CupertinoIcons.chevron_right),
-        color: Colors.white,
-      ),
-    ],
-  );
-}
-
 /* Recent row (mobile) */
 class _RecentRow extends StatelessWidget {
   const _RecentRow({required this.shots});
@@ -1058,6 +1152,49 @@ class _RecentRow extends StatelessWidget {
             ),
           );
         }).toList(),
+      ),
+    );
+  }
+}
+
+class _ScoreDisplay extends StatelessWidget {
+  const _ScoreDisplay({required this.scores, required this.players});
+  final Map<String, int> scores;
+  final List<Player> players;
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassPill(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: players
+              .map(
+                (p) => Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      p.name,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${scores[p.id] ?? 0}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+              .toList(),
+        ),
       ),
     );
   }
