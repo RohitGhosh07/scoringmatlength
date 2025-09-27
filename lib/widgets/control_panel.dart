@@ -108,7 +108,7 @@ class ControlPanel extends StatelessWidget {
                 icon: const Icon(CupertinoIcons.check_mark_circled_solid),
                 label: const Text('Save'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.g2,
+                  backgroundColor: AppColors.secondary,
                   foregroundColor: Colors.white,
                 ),
               ),

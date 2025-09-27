@@ -159,6 +159,8 @@ class _ScoringScreenState extends State<ScoringScreen>
   }
 
   void _nextEnd() {
+    // Prevent going beyond the scored end from BasicScoringScreen
+    if (_currentEnd >= widget.currentEnd) return;
     setState(() {
       _currentEnd += 1;
       _ensureEnd(_currentEnd);
@@ -170,13 +172,17 @@ class _ScoringScreenState extends State<ScoringScreen>
     setState(() => _currentEnd -= 1);
   }
 
+  // Remove ability to create new ends since they should come from BasicScoringScreen
   void _newEnd() {
-    setState(() {
-      _currentEnd = (_shots.keys.isEmpty
-          ? 1
-          : (_shots.keys.reduce(math.max) + 1));
-      _ensureEnd(_currentEnd);
-    });
+    // This functionality is disabled as ends should only be created in BasicScoringScreen
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'New ends can only be created in the basic scoring screen',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   void _clearCurrentEnd() {

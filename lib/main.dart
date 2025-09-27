@@ -15,7 +15,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Mat & Wood',
 
-      themeMode: ThemeMode.system, // Automatically use system theme
+      themeMode: ThemeMode.light, // Always use light theme
       home: const PlayerInputScreen(),
     );
   }

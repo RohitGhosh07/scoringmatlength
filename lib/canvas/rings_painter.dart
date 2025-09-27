@@ -45,7 +45,7 @@ class RingsPainter extends CustomPainter {
     // Inner glow
     final glowPaint = Paint()
       ..shader = RadialGradient(
-        colors: [AppColors.g2.withOpacity(0.20), Colors.transparent],
+        colors: [AppColors.secondary.withOpacity(0.20), Colors.transparent],
         stops: const [0.0, 1.0],
       ).createShader(Rect.fromCircle(center: center, radius: halfMin * 0.95));
     canvas.drawCircle(center, halfMin * 0.95, glowPaint);
@@ -63,12 +63,12 @@ class RingsPainter extends CustomPainter {
         ..style = PaintingStyle.fill
         ..shader = RadialGradient(
           colors: [
-            HSLColor.fromColor(AppColors.g2)
+            HSLColor.fromColor(AppColors.secondary)
                 .withLightness(
                   0.6 - (darknessFactor * 0.4),
                 ) // Progressively darker
                 .toColor(),
-            HSLColor.fromColor(AppColors.g2)
+            HSLColor.fromColor(AppColors.secondary)
                 .withLightness(
                   0.4 - (darknessFactor * 0.3),
                 ) // Progressively darker
@@ -161,7 +161,9 @@ class RingsPainter extends CustomPainter {
       final ripplePaint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = math.max(2, size.shortestSide * 0.004)
-        ..color = AppColors.g2.withOpacity((1 - rippleValue).clamp(0.0, 1.0));
+        ..color = AppColors.secondary.withOpacity(
+          (1 - rippleValue).clamp(0.0, 1.0),
+        );
       final maxRipple = rings.last * halfMin * 1.05;
       final rippleRadius = 14 + maxRipple * rippleValue;
       canvas.drawCircle(lastTap!, rippleRadius, ripplePaint);
