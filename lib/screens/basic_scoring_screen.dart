@@ -293,7 +293,7 @@ class _BasicScoringScreenState extends State<BasicScoringScreen> {
                     builder: (context) => ScoringScreen(
                       player1: widget.player1,
                       player2: widget.player2,
-                      currentEnd: currentEnd,
+                      currentEnd: index + 1, // Use the clicked end's index + 1
                       totalEnds: currentEnd,
                       player1TotalScore: _calculateTotalScore(true),
                       player2TotalScore: _calculateTotalScore(false),
