@@ -1,25 +1,19 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
-
-// Models
 import '../models/player.dart';
 import '../models/shot.dart';
 import '../models/end_stats.dart';
-
-// Canvas
-import '../canvas/canvas_area.dart';
-
-// Widgets
+import '../utils/constants.dart';
+import '../utils/scoring_utils.dart';
 import '../widgets/common.dart';
 import '../widgets/control_panel.dart';
 import '../widgets/end_selector.dart';
 import '../widgets/player_toggle.dart';
 import '../widgets/scoring_display.dart';
-
-// Utils
-import '../utils/scoring_utils.dart';
+import '../canvas/canvas_area.dart';
 
 class MatDitchScreen extends StatefulWidget {
   const MatDitchScreen({super.key});
@@ -29,17 +23,10 @@ class MatDitchScreen extends StatefulWidget {
 
 class _MatDitchScreenState extends State<MatDitchScreen>
     with TickerProviderStateMixin {
-  // Chrome colors
-  static const Color g2 = Color(0xFF30B082);
-
-  // Player dot colors
-  static const Color p1Dot = Color(0xFF5BE7C4); // Arya
-  static const Color p2Dot = Color(0xFFFFD166); // Rohit
-
   // Players (dummy)
   final List<Player> _players = const [
-    Player(id: 'p1', name: 'Arya', color: p1Dot),
-    Player(id: 'p2', name: 'Rohit', color: p2Dot),
+    Player(id: 'p1', name: 'Arya', color: AppColors.p1Dot),
+    Player(id: 'p2', name: 'Rohit', color: AppColors.p2Dot),
   ];
   String _selectedPlayerId = 'p1';
 
@@ -64,7 +51,6 @@ class _MatDitchScreenState extends State<MatDitchScreen>
   );
 
   Player get _selected => _players.firstWhere((p) => p.id == _selectedPlayerId);
-
   Map<String, List<Shot>> get _endShots => _shots[_currentEnd]!;
   List<Shot> _playerShots(String pid) => _endShots[pid]!;
   void _ensureEnd(int end) =>
@@ -146,8 +132,6 @@ class _MatDitchScreenState extends State<MatDitchScreen>
     });
   }
 
-  /* -------------------- Logic -------------------- */
-
   /* -------------------- Desktop Shortcuts -------------------- */
 
   void _handleKey(RawKeyEvent e) {
@@ -173,214 +157,6 @@ class _MatDitchScreenState extends State<MatDitchScreen>
         _save();
         break;
     }
-  }
-
-  /* -------------------- UI -------------------- */
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return RawKeyboardListener(
-      focusNode: FocusNode()..requestFocus(),
-      onKey: _handleKey,
-      child: LayoutBuilder(
-        builder: (ctx, constraints) {
-          final desktop = constraints.maxWidth >= 900;
-          final canvas = CanvasArea(
-            lastTapLocal: _lastTapLocal,
-            hoverLocal: _hoverLocal,
-            ripple: _ripple,
-            currentEnd: _currentEnd,
-            shots: _shots,
-            players: _players,
-            selectedPlayerId: _selectedPlayerId,
-            outerFraction: _outerFraction,
-            onTapResolved: _recordTap,
-            onHover: (p) => setState(() => _hoverLocal = p),
-          );
-
-          final controls = ControlPanel(
-            players: _players,
-            selectedId: _selectedPlayerId,
-            onPlayerChanged: _switchPlayer,
-            currentEnd: _currentEnd,
-            onPrevEnd: _prevEnd,
-            onNextEnd: _nextEnd,
-            onNewEnd: _newEnd,
-            onClearEnd: _clearCurrentEnd,
-            onSave: _save,
-            endStats: _computeStatsForEnd(_currentEnd),
-            onOpenSettings: () => _openSettingsSheet(context),
-          );
-
-          if (desktop) {
-            // Desktop / large tablet split layout
-            return Scaffold(
-              backgroundColor: isDark
-                  ? const Color(0xFF0E1511)
-                  : const Color(0xFFE9FFF4),
-              body: SafeArea(
-                child: Row(
-                  children: [
-                    Expanded(flex: 3, child: canvas),
-                    const SizedBox(width: 16),
-                    SizedBox(
-                      width: math.min(460, constraints.maxWidth * 0.35),
-                      child: controls,
-                    ),
-                    const SizedBox(width: 16),
-                  ],
-                ),
-              ),
-            );
-          } else {
-            // Mobile stacked with floating pills
-            return Scaffold(
-              extendBodyBehindAppBar: true,
-              backgroundColor: isDark
-                  ? const Color(0xFF0E1511)
-                  : const Color(0xFFE9FFF4),
-              body: Stack(
-                children: [
-                  Positioned.fill(child: canvas),
-
-                  // Top: player + end mini bar (refactored)
-                  SafeArea(
-                    minimum: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Row 1: Back • PlayerToggle • Settings
-                        GlassPill(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 4,
-                            ),
-                            child: Row(
-                              children: [
-                                CompactIconButton(
-                                  onPressed: () => Navigator.maybePop(context),
-                                  icon: CupertinoIcons.chevron_back,
-                                  tooltip: 'Back',
-                                ),
-
-                                const SizedBox(width: 6),
-
-                                // Flexible PlayerToggle so it never overflows
-                                Expanded(
-                                  child: AnimatedSize(
-                                    duration: const Duration(milliseconds: 180),
-                                    curve: Curves.easeOut,
-                                    child: PlayerToggle(
-                                      players: _players,
-                                      selectedId: _selectedPlayerId,
-                                      onChanged: _switchPlayer,
-                                      scores: _computeScores(),
-                                    ),
-                                  ),
-                                ),
-
-                                const SizedBox(width: 6),
-
-                                CompactIconButton(
-                                  onPressed: () => _openSettingsSheet(context),
-                                  icon: CupertinoIcons.slider_horizontal_3,
-                                  tooltip: 'Settings',
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 8),
-
-                        // Row 2: End selector (centered). Kept inside its own pill for clarity.
-                        GlassPill(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 6,
-                            ),
-                            child: Center(
-                              child: EndSelector(
-                                currentEnd: _currentEnd,
-                                onPrev: _prevEnd,
-                                onNext: _nextEnd,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Bottom: recent + actions
-                  SafeArea(
-                    minimum: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: GlassPill(
-                        child: Padding(
-                          padding: const EdgeInsets.all(10),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              RecentRow(shots: _playerShots(_selectedPlayerId)),
-                              const SizedBox(height: 10),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: AppButton(
-                                      onPressed: _undo,
-                                      icon: CupertinoIcons.arrow_uturn_left,
-                                      label: 'Undo',
-                                      tint: g2,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: AppButton(
-                                      onPressed: _save,
-                                      icon: CupertinoIcons
-                                          .check_mark_circled_solid,
-                                      label: 'Save',
-                                      color: g2,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }
-        },
-      ),
-    );
-  }
-
-  /* -------------------- Stats -------------------- */
-  Map<String, int> _computeScores() {
-    final scores = <String, int>{'p1': 0, 'p2': 0};
-    for (final end in _shots.entries) {
-      for (final player in _players) {
-        final shots = end.value[player.id] ?? [];
-        for (final shot in shots) {
-          if (shot.value != 'Ditch') {
-            scores[player.id] =
-                (scores[player.id] ?? 0) + (4 - int.parse(shot.value));
-          }
-        }
-      }
-    }
-    return scores;
   }
 
   EndStats _computeStatsForEnd(int end) {
@@ -460,7 +236,7 @@ class _MatDitchScreenState extends State<MatDitchScreen>
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Tip: Larger outer ring makes “Ditch” area smaller. Keep between 80–95% of half-min.',
+                    'Tip: Larger outer ring makes "Ditch" area smaller. Keep between 80–95% of half-min.',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.7),
                       fontSize: 12,
@@ -474,5 +250,194 @@ class _MatDitchScreenState extends State<MatDitchScreen>
         );
       },
     ).whenComplete(() => setState(() {}));
+  }
+
+  /* -------------------- Build -------------------- */
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return RawKeyboardListener(
+      focusNode: FocusNode()..requestFocus(),
+      onKey: _handleKey,
+      child: LayoutBuilder(
+        builder: (ctx, constraints) {
+          final desktop = constraints.maxWidth >= 900;
+          final canvas = CanvasArea(
+            lastTapLocal: _lastTapLocal,
+            hoverLocal: _hoverLocal,
+            ripple: _ripple,
+            currentEnd: _currentEnd,
+            shots: _shots,
+            players: _players,
+            selectedPlayerId: _selectedPlayerId,
+            outerFraction: _outerFraction,
+            onTapResolved: _recordTap,
+            onHover: (p) => setState(() => _hoverLocal = p),
+          );
+
+          final controls = ControlPanel(
+            players: _players,
+            selectedId: _selectedPlayerId,
+            onPlayerChanged: _switchPlayer,
+            currentEnd: _currentEnd,
+            onPrevEnd: _prevEnd,
+            onNextEnd: _nextEnd,
+            onNewEnd: _newEnd,
+            onClearEnd: _clearCurrentEnd,
+            onSave: _save,
+            endStats: _computeStatsForEnd(_currentEnd),
+            onOpenSettings: () => _openSettingsSheet(context),
+          );
+
+          if (desktop) {
+            // Desktop / large tablet split layout
+            return Scaffold(
+              backgroundColor: isDark
+                  ? const Color(0xFF0E1511)
+                  : const Color(0xFFE9FFF4),
+              body: SafeArea(
+                child: Row(
+                  children: [
+                    Expanded(flex: 3, child: canvas),
+                    const SizedBox(width: 16),
+                    SizedBox(
+                      width: math.min(460, constraints.maxWidth * 0.35),
+                      child: controls,
+                    ),
+                    const SizedBox(width: 16),
+                  ],
+                ),
+              ),
+            );
+          } else {
+            // Mobile stacked with floating pills
+            return Scaffold(
+              extendBodyBehindAppBar: true,
+              backgroundColor: isDark
+                  ? const Color(0xFF0E1511)
+                  : const Color(0xFFE9FFF4),
+              body: Stack(
+                children: [
+                  Positioned.fill(child: canvas),
+
+                  // Top: player + end mini bar
+                  SafeArea(
+                    minimum: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Row 1: Back • PlayerToggle • Settings
+                        GlassPill(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 4,
+                            ),
+                            child: Row(
+                              children: [
+                                CompactIconButton(
+                                  onPressed: () => Navigator.maybePop(context),
+                                  icon: CupertinoIcons.chevron_back,
+                                  tooltip: 'Back',
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: AnimatedSize(
+                                    duration: const Duration(milliseconds: 180),
+                                    curve: Curves.easeOut,
+                                    child: PlayerToggle(
+                                      players: _players,
+                                      selectedId: _selectedPlayerId,
+                                      onChanged: _switchPlayer,
+                                      scores: computeScores(_shots, [
+                                        'p1',
+                                        'p2',
+                                      ]),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                CompactIconButton(
+                                  onPressed: () => _openSettingsSheet(context),
+                                  icon: CupertinoIcons.slider_horizontal_3,
+                                  tooltip: 'Settings',
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        // Row 2: End selector
+                        GlassPill(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 6,
+                            ),
+                            child: Center(
+                              child: EndSelector(
+                                currentEnd: _currentEnd,
+                                onPrev: _prevEnd,
+                                onNext: _nextEnd,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Bottom: recent + actions
+                  SafeArea(
+                    minimum: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: GlassPill(
+                        child: Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              RecentRow(shots: _playerShots(_selectedPlayerId)),
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: FrostedButton.icon(
+                                      onPressed: _undo,
+                                      icon: CupertinoIcons.arrow_uturn_left,
+                                      label: 'Undo',
+                                      tint: AppColors.g2,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: SolidButton.icon(
+                                      onPressed: _save,
+                                      icon: CupertinoIcons
+                                          .check_mark_circled_solid,
+                                      label: 'Save',
+                                      color: AppColors.g2,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+        },
+      ),
+    );
   }
 }
