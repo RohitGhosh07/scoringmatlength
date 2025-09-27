@@ -586,6 +586,44 @@ class _ScoringScreenState extends State<ScoringScreen>
   }
 
   /* -------------------- Settings Sheet -------------------- */
+  Future<void> _clearAllData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // Clear shots data for all ends
+      for (int end = 1; end <= widget.totalEnds; end++) {
+        await prefs.remove('shots_end_$end');
+      }
+      // Clear shots map in memory
+      setState(() {
+        _shots.clear();
+        // Reinitialize current end
+        _ensureEnd(_currentEnd);
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('All data has been cleared'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error clearing data: $e'),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   void _openSettingsSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -642,6 +680,66 @@ class _ScoringScreenState extends State<ScoringScreen>
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.7),
                       fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Divider(color: Colors.white24),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        // Show confirmation dialog
+                        showDialog(
+                          context: context,
+                          builder: (BuildContext context) {
+                            return AlertDialog(
+                              backgroundColor: const Color(0xFF111A15),
+                              title: const Text(
+                                'Clear All Data',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                              content: const Text(
+                                'This will clear all stored shots data. This action cannot be undone.',
+                                style: TextStyle(color: Colors.white70),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  child: const Text(
+                                    'Cancel',
+                                    style: TextStyle(color: Colors.white70),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    Navigator.of(context).pop();
+                                    Navigator.of(
+                                      context,
+                                    ).pop(); // Close settings sheet
+                                    _clearAllData();
+                                  },
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Colors.red,
+                                  ),
+                                  child: const Text('Clear All'),
+                                ),
+                              ],
+                            );
+                          },
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red[800],
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Text(
+                          'Clear All Data',
+                          style: TextStyle(fontSize: 16),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
