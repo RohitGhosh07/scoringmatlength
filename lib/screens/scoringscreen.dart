@@ -20,17 +20,25 @@ import '../widgets/scoring_display.dart';
 
 // Utils
 import '../utils/scoring_utils.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 class ScoringScreen extends StatefulWidget {
   final Player player1;
   final Player player2;
   final int currentEnd;
+  final int totalEnds;
+  final int player1TotalScore;
+  final int player2TotalScore;
 
   const ScoringScreen({
     super.key,
     required this.player1,
     required this.player2,
     required this.currentEnd,
+    required this.totalEnds,
+    required this.player1TotalScore,
+    required this.player2TotalScore,
   });
 
   @override
@@ -56,9 +64,42 @@ class _ScoringScreenState extends State<ScoringScreen>
     _selectedPlayerId = widget.player1.id;
     _currentEnd = widget.currentEnd;
     _ensureEnd(_currentEnd);
+
+    // Initialize SharedPreferences and load shots after frame is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeSharedPreferences();
+    });
   }
 
-  // UI state
+  Future<void> _initializeSharedPreferences() async {
+    bool hadError = false;
+    // Load saved shots for all ends up to the current end
+    for (int end = 1; end <= widget.totalEnds; end++) {
+      try {
+        await _loadShotsForEnd(end);
+      } catch (e) {
+        hadError = true;
+        debugPrint('Failed to load end $end: $e');
+        // Continue loading other ends even if one fails
+        continue;
+      }
+    }
+
+    if (mounted) {
+      setState(() {});
+      if (hadError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Some shots could not be loaded from storage'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    }
+  } // UI state
+
   Offset? _lastTapLocal;
   Offset? _hoverLocal; // desktop hover preview
   double _outerFraction = 0.90; // adjustable from settings
@@ -74,12 +115,12 @@ class _ScoringScreenState extends State<ScoringScreen>
 
   Player get _selected => _players.firstWhere((p) => p.id == _selectedPlayerId);
 
-  Map<String, List<Shot>> get _endShots =>
-      _shots[_currentEnd] ?? {'p1': [], 'p2': []};
   List<Shot> _playerShots(String pid) {
-    // Initialize shots list if it doesn't exist
-    _endShots[pid] ??= [];
-    return _endShots[pid]!;
+    // Make sure we have a map for the current end
+    _shots[_currentEnd] ??= {};
+    // Make sure we have a list for this player
+    _shots[_currentEnd]![pid] ??= [];
+    return _shots[_currentEnd]![pid]!;
   }
 
   bool _canAddShot(String playerId) {
@@ -126,6 +167,9 @@ class _ScoringScreenState extends State<ScoringScreen>
       _playerShots(opponentId); // This ensures the list exists
     });
 
+    // Save shots after adding a new one
+    _save();
+
     final shotsCount = _playerShots(_selectedPlayerId).length;
     final msg = value == 'Ditch'
         ? 'Ditch recorded'
@@ -145,22 +189,85 @@ class _ScoringScreenState extends State<ScoringScreen>
     final list = _playerShots(_selectedPlayerId);
     if (list.isNotEmpty) {
       setState(() => list.removeLast());
+      // Save shots after removing one
+      _save();
     }
   }
 
-  void _save() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Saved current end. Points stay visible.'),
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(milliseconds: 900),
-      ),
-    );
+  Future<void> _save() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Convert the current end's shots to JSON
+      final endShotsJson = _shots[_currentEnd]?.map((playerId, shots) {
+        return MapEntry(playerId, shots.map((shot) => shot.toJson()).toList());
+      });
+
+      if (endShotsJson != null) {
+        // Save to shared preferences with a key that includes the end number
+        final key = 'shots_end_$_currentEnd';
+        final jsonString = jsonEncode(endShotsJson);
+        final success = await prefs.setString(key, jsonString);
+
+        if (!success) {
+          throw Exception('Failed to save to SharedPreferences');
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Saved current end. Points stay visible.'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(milliseconds: 900),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving shots: $e'),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _loadShotsForEnd(int end) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'shots_end_$end';
+      final storedData = prefs.getString(key);
+
+      if (storedData != null) {
+        final decodedData = jsonDecode(storedData) as Map<String, dynamic>;
+
+        _shots[end] = {};
+        decodedData.forEach((playerId, shotsJson) {
+          _shots[end]![playerId] = (shotsJson as List)
+              .map(
+                (shotJson) =>
+                    Shot.fromJson(Map<String, dynamic>.from(shotJson)),
+              )
+              .toList();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        debugPrint('Error loading shots for end $end: $e');
+      }
+      // Re-throw to be handled by _initializeSharedPreferences
+      rethrow;
+    }
   }
 
   void _nextEnd() {
-    // Prevent going beyond the scored end from BasicScoringScreen
-    if (_currentEnd >= widget.currentEnd) return;
+    // Prevent going beyond the total ends from BasicScoringScreen
+    if (_currentEnd >= widget.totalEnds) return;
     setState(() {
       _currentEnd += 1;
       _ensureEnd(_currentEnd);
@@ -188,6 +295,8 @@ class _ScoringScreenState extends State<ScoringScreen>
   void _clearCurrentEnd() {
     setState(() {
       _shots[_currentEnd] = {'p1': [], 'p2': []};
+      // Save the cleared end
+      _save();
     });
   }
 

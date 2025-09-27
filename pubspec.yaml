@@ -37,6 +37,7 @@ dependencies:
   google_fonts: ^6.1.0
   flutter_riverpod: ^2.4.9
   flutter_animate: ^4.5.0
+  shared_preferences: ^2.5.3
 
 dev_dependencies:
   flutter_test:
