@@ -21,33 +21,42 @@ import '../widgets/scoring_display.dart';
 // Utils
 import '../utils/scoring_utils.dart';
 
-class MatDitchScreen extends StatefulWidget {
-  const MatDitchScreen({super.key});
+class ScoringScreen extends StatefulWidget {
+  final Player player1;
+  final Player player2;
+  final int currentEnd;
+
+  const ScoringScreen({
+    super.key,
+    required this.player1,
+    required this.player2,
+    required this.currentEnd,
+  });
+
   @override
-  State<MatDitchScreen> createState() => _MatDitchScreenState();
+  State<ScoringScreen> createState() => _ScoringScreenState();
 }
 
-class _MatDitchScreenState extends State<MatDitchScreen>
+class _ScoringScreenState extends State<ScoringScreen>
     with TickerProviderStateMixin {
   // Chrome colors
   static const Color g2 = Color(0xFF30B082);
 
-  // Player dot colors
-  static const Color p1Dot = Color(0xFF5BE7C4); // Arya
-  static const Color p2Dot = Color(0xFFFFD166); // Rohit
-
-  // Players (dummy)
-  final List<Player> _players = const [
-    Player(id: 'p1', name: 'Arya', color: p1Dot),
-    Player(id: 'p2', name: 'Rohit', color: p2Dot),
-  ];
-  String _selectedPlayerId = 'p1';
+  late List<Player> _players;
+  late String _selectedPlayerId;
 
   // Ends -> Player -> Shots
-  final Map<int, Map<String, List<Shot>>> _shots = {
-    1: {'p1': [], 'p2': []},
-  };
-  int _currentEnd = 1;
+  final Map<int, Map<String, List<Shot>>> _shots = {};
+  late int _currentEnd;
+
+  @override
+  void initState() {
+    super.initState();
+    _players = [widget.player1, widget.player2];
+    _selectedPlayerId = widget.player1.id;
+    _currentEnd = widget.currentEnd;
+    _ensureEnd(_currentEnd);
+  }
 
   // UI state
   Offset? _lastTapLocal;
@@ -65,16 +74,39 @@ class _MatDitchScreenState extends State<MatDitchScreen>
 
   Player get _selected => _players.firstWhere((p) => p.id == _selectedPlayerId);
 
-  Map<String, List<Shot>> get _endShots => _shots[_currentEnd]!;
-  List<Shot> _playerShots(String pid) => _endShots[pid]!;
-  void _ensureEnd(int end) =>
-      _shots.putIfAbsent(end, () => {'p1': [], 'p2': []});
+  Map<String, List<Shot>> get _endShots =>
+      _shots[_currentEnd] ?? {'p1': [], 'p2': []};
+  List<Shot> _playerShots(String pid) {
+    // Initialize shots list if it doesn't exist
+    _endShots[pid] ??= [];
+    return _endShots[pid]!;
+  }
+
+  bool _canAddShot(String playerId) {
+    // Maximum 4 shots per player per end
+    return _playerShots(playerId).length < 4;
+  }
+
+  void _ensureEnd(int end) {
+    _shots.putIfAbsent(end, () => {'p1': [], 'p2': []});
+  }
 
   /* -------------------- Actions -------------------- */
 
   void _switchPlayer(String id) => setState(() => _selectedPlayerId = id);
 
   void _recordTap(Offset localPos, Size size) {
+    if (!_canAddShot(_selectedPlayerId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${_selected.name} has already taken 4 shots this end'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(milliseconds: 1500),
+        ),
+      );
+      return;
+    }
+
     final value = classifyTap(localPos, size, _outerFraction);
     final norm = Offset(localPos.dx / size.width, localPos.dy / size.height);
     final shot = Shot(
@@ -88,14 +120,21 @@ class _MatDitchScreenState extends State<MatDitchScreen>
       _lastTapLocal = localPos;
       _rippleCtrl.forward(from: 0);
       _playerShots(_selectedPlayerId).add(shot);
+
+      // Initialize opponent's shots list if empty
+      final opponentId = _selectedPlayerId == 'p1' ? 'p2' : 'p1';
+      _playerShots(opponentId); // This ensures the list exists
     });
 
+    final shotsCount = _playerShots(_selectedPlayerId).length;
     final msg = value == 'Ditch'
         ? 'Ditch recorded'
         : 'Mat length set to $value';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('End $_currentEnd • ${_selected.name}: $msg'),
+        content: Text(
+          'End $_currentEnd • ${_selected.name}: $msg (Shot $shotsCount/4)',
+        ),
         behavior: SnackBarBehavior.floating,
         duration: const Duration(milliseconds: 900),
       ),
@@ -278,6 +317,10 @@ class _MatDitchScreenState extends State<MatDitchScreen>
                                       selectedId: _selectedPlayerId,
                                       onChanged: _switchPlayer,
                                       scores: _computeScores(),
+                                      shotsLeft: {
+                                        'p1': 4 - (_playerShots('p1').length),
+                                        'p2': 4 - (_playerShots('p2').length),
+                                      },
                                     ),
                                   ),
                                 ),
@@ -370,15 +413,35 @@ class _MatDitchScreenState extends State<MatDitchScreen>
   Map<String, int> _computeScores() {
     final scores = <String, int>{'p1': 0, 'p2': 0};
     for (final end in _shots.entries) {
+      // Get best shot (lowest number = closest to center) for each player in this end
+      Map<String, int?> bestShots = {};
       for (final player in _players) {
         final shots = end.value[player.id] ?? [];
+        int? bestValue;
         for (final shot in shots) {
           if (shot.value != 'Ditch') {
-            scores[player.id] =
-                (scores[player.id] ?? 0) + (4 - int.parse(shot.value));
+            final value = int.parse(shot.value);
+            bestValue = bestValue == null ? value : math.min(bestValue, value);
           }
         }
+        bestShots[player.id] = bestValue;
       }
+
+      // Only score points for the player with the closest shot (lowest number)
+      // If both have the same best shot, no points are awarded
+      final p1Best = bestShots['p1'];
+      final p2Best = bestShots['p2'];
+
+      if (p1Best != null && (p2Best == null || p1Best < p2Best)) {
+        // Player 1 wins the end
+        scores['p1'] = (scores['p1'] ?? 0) + (4 - p1Best);
+        // Player 2 gets 0 for this end (already initialized to 0)
+      } else if (p2Best != null && (p1Best == null || p2Best < p1Best)) {
+        // Player 2 wins the end
+        scores['p2'] = (scores['p2'] ?? 0) + (4 - p2Best);
+        // Player 1 gets 0 for this end (already initialized to 0)
+      }
+      // If equal or no valid shots, no points awarded
     }
     return scores;
   }
