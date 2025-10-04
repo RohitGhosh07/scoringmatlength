@@ -92,23 +92,23 @@ class PlayerToggle extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          'Score: ${scores[p.id] ?? 0}',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.7),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '(${shotsLeft[p.id] ?? 4} shots left)',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.7),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        // Text(
+                        //   'Score: ${scores[p.id] ?? 0}',
+                        //   style: TextStyle(
+                        //     color: Colors.white.withOpacity(0.7),
+                        //     fontSize: 12,
+                        //     fontWeight: FontWeight.w600,
+                        //   ),
+                        // ),
+                        // const SizedBox(width: 8),
+                        // Text(
+                        //   '(${shotsLeft[p.id] ?? 4} shots left)',
+                        //   style: TextStyle(
+                        //     color: Colors.white.withOpacity(0.7),
+                        //     fontSize: 12,
+                        //     fontWeight: FontWeight.w600,
+                        //   ),
+                        // ),
                       ],
                     ),
                   ],
