@@ -404,7 +404,7 @@ class _ScoringScreenState extends State<ScoringScreen>
                 children: [
                   Positioned.fill(child: canvas),
 
-                  // Top: player + end mini bar (refactored)
+                  // Top: player + end mini bar (refactored, same UI, cleaner structure)
                   SafeArea(
                     minimum: const EdgeInsets.fromLTRB(12, 10, 12, 0),
                     child: Column(
@@ -414,8 +414,8 @@ class _ScoringScreenState extends State<ScoringScreen>
                         GlassPill(
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 4,
+                              horizontal: 8,
+                              vertical: 6,
                             ),
                             child: Row(
                               children: [
@@ -425,7 +425,7 @@ class _ScoringScreenState extends State<ScoringScreen>
                                   tooltip: 'Back',
                                 ),
 
-                                const SizedBox(width: 6),
+                                const SizedBox(width: 8),
 
                                 // Flexible PlayerToggle so it never overflows
                                 Expanded(
@@ -438,8 +438,8 @@ class _ScoringScreenState extends State<ScoringScreen>
                                       onChanged: _switchPlayer,
                                       scores: _computeScores(),
                                       shotsLeft: {
-                                        'p1': 4 - (_playerShots('p1').length),
-                                        'p2': 4 - (_playerShots('p2').length),
+                                        'p1': 4 - _playerShots('p1').length,
+                                        'p2': 4 - _playerShots('p2').length,
                                       },
                                       endScores: widget.endScore,
                                       currentEnd: widget.currentEnd,
@@ -447,7 +447,7 @@ class _ScoringScreenState extends State<ScoringScreen>
                                   ),
                                 ),
 
-                                const SizedBox(width: 6),
+                                const SizedBox(width: 8),
 
                                 CompactIconButton(
                                   onPressed: () => _openSettingsSheet(context),
@@ -459,9 +459,47 @@ class _ScoringScreenState extends State<ScoringScreen>
                           ),
                         ),
 
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 10),
 
-                        // Row 2: End selector (centered). Kept inside its own pill for clarity.
+                        // End score display with modern look (kept same content, cleaner layout)
+                        // GlassPill(
+                        //   child: Padding(
+                        //     padding: const EdgeInsets.all(12),
+                        //     child: Row(
+                        //       children: [
+                        //         Expanded(
+                        //           child: _buildModernScoreCard(
+                        //             playerName: widget.player1.name,
+                        //             playerColor: widget.player1.color,
+                        //             score: widget.endScore['player1'] ?? 0,
+                        //             endNumber: widget.currentEnd,
+                        //           ),
+                        //         ),
+                        //         // Slim divider
+                        //         Container(
+                        //           width: 1,
+                        //           height: 40,
+                        //           margin: const EdgeInsets.symmetric(
+                        //             horizontal: 12,
+                        //           ),
+                        //           color: Colors.white12,
+                        //         ),
+                        //         Expanded(
+                        //           child: _buildModernScoreCard(
+                        //             playerName: widget.player2.name,
+                        //             playerColor: widget.player2.color,
+                        //             score: widget.endScore['player2'] ?? 0,
+                        //             endNumber: widget.currentEnd,
+                        //           ),
+                        //         ),
+                        //       ],
+                        //     ),
+                        //   ),
+                        // ),
+
+                        // const SizedBox(height: 10),
+
+                        // Row 2: End selector (centered) — kept in its own pill
                         GlassPill(
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
@@ -473,6 +511,8 @@ class _ScoringScreenState extends State<ScoringScreen>
                                 currentEnd: _currentEnd,
                                 onPrev: _prevEnd,
                                 onNext: _nextEnd,
+                                leftScore: widget.endScore['player1'] ?? 0,
+                                rightScore: widget.endScore['player2'] ?? 0,
                               ),
                             ),
                           ),
@@ -480,33 +520,6 @@ class _ScoringScreenState extends State<ScoringScreen>
                       ],
                     ),
                   ),
-
-                  // // End score display
-                  // Positioned(
-                  //   left: 12,
-                  //   right: 12,
-                  //   bottom: 140, // Position above the actions panel
-                  //   child: Container(
-                  //     margin: const EdgeInsets.only(bottom: 8),
-                  //     child: Column(
-                  //       mainAxisSize: MainAxisSize.min,
-                  //       children: [
-                  //         EndScoreDisplay(
-                  //           playerName: widget.player1.name,
-                  //           playerColor: widget.player1.color,
-                  //           score: widget.endScore['player1'] ?? 0,
-                  //           endNumber: widget.currentEnd,
-                  //         ),
-                  //         EndScoreDisplay(
-                  //           playerName: widget.player2.name,
-                  //           playerColor: widget.player2.color,
-                  //           score: widget.endScore['player2'] ?? 0,
-                  //           endNumber: widget.currentEnd,
-                  //         ),
-                  //       ],
-                  //     ),
-                  //   ),
-                  // ),
 
                   // Bottom: recent + actions
                   SafeArea(
@@ -616,6 +629,51 @@ class _ScoringScreenState extends State<ScoringScreen>
       ringCounts: ringCounts,
       wood: wood,
       perPlayerShots: perPlayer,
+    );
+  }
+
+  /* -------------------- UI Helpers -------------------- */
+  Widget _buildModernScoreCard({
+    required String playerName,
+    required Color playerColor,
+    required int score,
+    required int endNumber,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: playerColor,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              playerName,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w500,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          score.toString(),
+          style: TextStyle(
+            color: playerColor,
+            fontWeight: FontWeight.bold,
+            fontSize: 28,
+          ),
+        ),
+      ],
     );
   }
 

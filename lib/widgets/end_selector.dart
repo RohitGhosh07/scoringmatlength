@@ -7,31 +7,61 @@ class EndSelector extends StatelessWidget {
     required this.currentEnd,
     required this.onPrev,
     required this.onNext,
+    required this.leftScore,
+    required this.rightScore,
+    this.leftLabel,
+    this.rightLabel,
   });
 
   final int currentEnd;
   final VoidCallback onPrev;
   final VoidCallback onNext;
 
+  /// Scores to show on the left and right of the End badge
+  final int leftScore;
+  final int rightScore;
+
+  /// Optional team labels under the scores
+  final String? leftLabel;
+  final String? rightLabel;
+
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        MiniGlassButton(
-          icon: CupertinoIcons.chevron_left,
-          onTap: onPrev,
-          tooltip: 'Previous End',
-        ),
-        const SizedBox(width: 8),
-        EndBadge(value: currentEnd),
-        const SizedBox(width: 8),
-        MiniGlassButton(
-          icon: CupertinoIcons.chevron_right,
-          onTap: onNext,
-          tooltip: 'Next End',
-        ),
-      ],
+    return SizedBox(
+      width: double.infinity, // lets the arrows sit at the extremes
+      child: Row(
+        children: [
+          // Extreme left arrow
+          MiniGlassButton(
+            icon: CupertinoIcons.chevron_left,
+            onTap: onPrev,
+            tooltip: 'Previous End',
+          ),
+
+          // Center area expands; scores flank the End badge
+          Expanded(
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ScorePill(value: leftScore, label: leftLabel),
+                  const SizedBox(width: 10),
+                  EndBadge(value: currentEnd),
+                  const SizedBox(width: 10),
+                  ScorePill(value: rightScore, label: rightLabel),
+                ],
+              ),
+            ),
+          ),
+
+          // Extreme right arrow
+          MiniGlassButton(
+            icon: CupertinoIcons.chevron_right,
+            onTap: onNext,
+            tooltip: 'Next End',
+          ),
+        ],
+      ),
     );
   }
 }
@@ -92,12 +122,12 @@ class EndBadge extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              CupertinoIcons.circle_grid_3x3,
-              size: 14,
-              color: Colors.white70,
-            ),
-            const SizedBox(width: 6),
+            // const Icon(
+            //   CupertinoIcons.circle_grid_3x3,
+            //   size: 14,
+            //   color: Colors.white70,
+            // ),
+            // const SizedBox(width: 6),
             Text(
               'End $value',
               style: const TextStyle(
@@ -109,6 +139,50 @@ class EndBadge extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class ScorePill extends StatelessWidget {
+  const ScorePill({super.key, required this.value, this.label});
+
+  final int value;
+  final String? label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.12)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$value',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+              letterSpacing: 0.2,
+            ),
+          ),
+          if (label != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              label!,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 10.5,
+                height: 1.0,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

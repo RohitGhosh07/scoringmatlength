@@ -24,7 +24,7 @@ class PlayerToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 70,
+      height: 50,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -93,27 +93,27 @@ class PlayerToggle extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Column(
-                      children: [
-                        Text(
-                          'End $currentEnd: ${endScores[p.id == 'p1' ? 'player1' : 'player2'] ?? 0}',
-                          style: TextStyle(
-                            color: p.color,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        Text(
-                          '${shotsLeft[p.id] ?? 4} shots left',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.7),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
+                    // const SizedBox(height: 4),
+                    // Column(
+                    //   children: [
+                    //     Text(
+                    //       'End $currentEnd: ${endScores[p.id == 'p1' ? 'player1' : 'player2'] ?? 0}',
+                    //       style: TextStyle(
+                    //         color: p.color,
+                    //         fontSize: 13,
+                    //         fontWeight: FontWeight.w700,
+                    //       ),
+                    //     ),
+                    //     Text(
+                    //       '${shotsLeft[p.id] ?? 4} shots left',
+                    //       style: TextStyle(
+                    //         color: Colors.white.withOpacity(0.7),
+                    //         fontSize: 11,
+                    //         fontWeight: FontWeight.w500,
+                    //       ),
+                    //     ),
+                    //   ],
+                    // ),
                   ],
                 ),
               ),
