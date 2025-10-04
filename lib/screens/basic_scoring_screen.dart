@@ -297,6 +297,7 @@ class _BasicScoringScreenState extends State<BasicScoringScreen> {
                       totalEnds: currentEnd,
                       player1TotalScore: _calculateTotalScore(true),
                       player2TotalScore: _calculateTotalScore(false),
+                      endScore: scores[index],
                     ),
                   ),
                 );

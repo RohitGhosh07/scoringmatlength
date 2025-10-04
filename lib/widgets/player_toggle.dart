@@ -8,8 +8,13 @@ class PlayerToggle extends StatelessWidget {
     required this.selectedId,
     required this.onChanged,
     required this.scores,
-    required this.shotsLeft, // Add this
+    required this.shotsLeft,
+    required this.endScores,
+    required this.currentEnd,
   });
+
+  final Map<String, int> endScores;
+  final int currentEnd;
   final List<Player> players;
   final String selectedId;
   final ValueChanged<String> onChanged;
@@ -19,7 +24,7 @@ class PlayerToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 44,
+      height: 70,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -89,26 +94,24 @@ class PlayerToggle extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    Column(
                       children: [
-                        // Text(
-                        //   'Score: ${scores[p.id] ?? 0}',
-                        //   style: TextStyle(
-                        //     color: Colors.white.withOpacity(0.7),
-                        //     fontSize: 12,
-                        //     fontWeight: FontWeight.w600,
-                        //   ),
-                        // ),
-                        // const SizedBox(width: 8),
-                        // Text(
-                        //   '(${shotsLeft[p.id] ?? 4} shots left)',
-                        //   style: TextStyle(
-                        //     color: Colors.white.withOpacity(0.7),
-                        //     fontSize: 12,
-                        //     fontWeight: FontWeight.w600,
-                        //   ),
-                        // ),
+                        Text(
+                          'End $currentEnd: ${endScores[p.id == 'p1' ? 'player1' : 'player2'] ?? 0}',
+                          style: TextStyle(
+                            color: p.color,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          '${shotsLeft[p.id] ?? 4} shots left',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.7),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ],
                     ),
                   ],

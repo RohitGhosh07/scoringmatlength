@@ -8,6 +8,9 @@ import '../models/player.dart';
 import '../models/shot.dart';
 import '../models/end_stats.dart';
 
+// Widgets
+import '../widgets/end_score_display.dart';
+
 // Canvas
 import '../canvas/canvas_area.dart';
 
@@ -30,6 +33,7 @@ class ScoringScreen extends StatefulWidget {
   final int totalEnds;
   final int player1TotalScore;
   final int player2TotalScore;
+  final Map<String, int> endScore;
 
   const ScoringScreen({
     super.key,
@@ -39,6 +43,7 @@ class ScoringScreen extends StatefulWidget {
     required this.totalEnds,
     required this.player1TotalScore,
     required this.player2TotalScore,
+    required this.endScore,
   });
 
   @override
@@ -436,6 +441,8 @@ class _ScoringScreenState extends State<ScoringScreen>
                                         'p1': 4 - (_playerShots('p1').length),
                                         'p2': 4 - (_playerShots('p2').length),
                                       },
+                                      endScores: widget.endScore,
+                                      currentEnd: widget.currentEnd,
                                     ),
                                   ),
                                 ),
@@ -473,6 +480,33 @@ class _ScoringScreenState extends State<ScoringScreen>
                       ],
                     ),
                   ),
+
+                  // // End score display
+                  // Positioned(
+                  //   left: 12,
+                  //   right: 12,
+                  //   bottom: 140, // Position above the actions panel
+                  //   child: Container(
+                  //     margin: const EdgeInsets.only(bottom: 8),
+                  //     child: Column(
+                  //       mainAxisSize: MainAxisSize.min,
+                  //       children: [
+                  //         EndScoreDisplay(
+                  //           playerName: widget.player1.name,
+                  //           playerColor: widget.player1.color,
+                  //           score: widget.endScore['player1'] ?? 0,
+                  //           endNumber: widget.currentEnd,
+                  //         ),
+                  //         EndScoreDisplay(
+                  //           playerName: widget.player2.name,
+                  //           playerColor: widget.player2.color,
+                  //           score: widget.endScore['player2'] ?? 0,
+                  //           endNumber: widget.currentEnd,
+                  //         ),
+                  //       ],
+                  //     ),
+                  //   ),
+                  // ),
 
                   // Bottom: recent + actions
                   SafeArea(
