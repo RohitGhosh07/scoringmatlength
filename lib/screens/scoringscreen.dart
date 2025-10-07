@@ -23,6 +23,7 @@ import '../widgets/scoring_display.dart';
 
 // Utils
 import '../utils/scoring_utils.dart';
+import '../utils/url_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
@@ -70,10 +71,37 @@ class _ScoringScreenState extends State<ScoringScreen>
     _currentEnd = widget.currentEnd;
     _ensureEnd(_currentEnd);
 
-    // Initialize SharedPreferences and load shots after frame is built
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeSharedPreferences();
-    });
+    // Check if we have URL parameters for shots
+    Uri uri = Uri.base;
+    // If we have a hash route, parse it
+    if (uri.fragment.isNotEmpty) {
+      uri = Uri.parse(uri.fragment);
+    }
+    final p1Shots = uri.queryParameters['p1_shots'];
+    final p2Shots = uri.queryParameters['p2_shots'];
+
+    if (p1Shots != null || p2Shots != null) {
+      // Parse shots from URL parameters
+      if (p1Shots != null) {
+        _shots[_currentEnd]?['p1'] = UrlParser.parseShots(
+          p1Shots,
+          'p1',
+          _currentEnd,
+        );
+      }
+      if (p2Shots != null) {
+        _shots[_currentEnd]?['p2'] = UrlParser.parseShots(
+          p2Shots,
+          'p2',
+          _currentEnd,
+        );
+      }
+    } else {
+      // If no URL shots, initialize SharedPreferences and load shots after frame is built
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _initializeSharedPreferences();
+      });
+    }
   }
 
   Future<void> _initializeSharedPreferences() async {
@@ -629,51 +657,6 @@ class _ScoringScreenState extends State<ScoringScreen>
       ringCounts: ringCounts,
       wood: wood,
       perPlayerShots: perPlayer,
-    );
-  }
-
-  /* -------------------- UI Helpers -------------------- */
-  Widget _buildModernScoreCard({
-    required String playerName,
-    required Color playerColor,
-    required int score,
-    required int endNumber,
-  }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(
-                color: playerColor,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              playerName,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w500,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          score.toString(),
-          style: TextStyle(
-            color: playerColor,
-            fontWeight: FontWeight.bold,
-            fontSize: 28,
-          ),
-        ),
-      ],
     );
   }
 
