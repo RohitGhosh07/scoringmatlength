@@ -46,16 +46,26 @@ final router = GoRouter(
         final player1Name = params['player1Name'] ?? 'Player 1';
         final player2Name = params['player2Name'] ?? 'Player 2';
 
-        // Create player objects
+        // Create player objects with distinct colors
         final player1 = Player(
           id: 'p1',
           name: player1Name,
-          color: const Color(0xFF30B082),
+          color: const Color.fromARGB(
+            255,
+            255,
+            0,
+            230,
+          ), // Yellow color for player 1
         );
         final player2 = Player(
           id: 'p2',
           name: player2Name,
-          color: const Color(0xFF30B082),
+          color: const Color.fromARGB(
+            255,
+            242,
+            255,
+            0,
+          ), // Orange color for player 2
         );
 
         // Parse end information
