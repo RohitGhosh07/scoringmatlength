@@ -53,8 +53,8 @@ final router = GoRouter(
           color: const Color.fromARGB(
             255,
             255,
+            174,
             0,
-            230,
           ), // Yellow color for player 1
         );
         final player2 = Player(
@@ -62,9 +62,9 @@ final router = GoRouter(
           name: player2Name,
           color: const Color.fromARGB(
             255,
-            242,
-            255,
             0,
+            251,
+            255,
           ), // Orange color for player 2
         );
 
