@@ -7,11 +7,11 @@ import '../screens/scoringscreen.dart';
 import '../utils/url_utils.dart';
 
 final router = GoRouter(
-  initialLocation: '/scoring',
+  initialLocation: '/',
   debugLogDiagnostics: true,
   routes: [
     GoRoute(
-      path: '/scoring',
+      path: '/',
       builder: (context, state) {
         // Get query parameters from location
         final location = html.window.location;
