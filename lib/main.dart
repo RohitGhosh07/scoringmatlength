@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'screens/player_input_screen.dart';
+import 'package:go_router/go_router.dart';
+import 'config/router_config.dart';
+import 'package:flutter_web_plugins/flutter_web_plugins.dart';
 
 void main() {
+  // Configure for web
+  if (kIsWeb) {
+    setUrlStrategy(PathUrlStrategy());
+  }
   runApp(const ProviderScope(child: MyApp()));
 }
 
@@ -12,11 +19,10 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'Mat & Wood',
-
       themeMode: ThemeMode.light, // Always use light theme
-      home: const PlayerInputScreen(),
+      routerConfig: router,
     );
   }
 }

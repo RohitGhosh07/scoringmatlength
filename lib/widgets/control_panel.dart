@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../models/player.dart';
 import '../models/end_stats.dart';
-import '../utils/constants.dart';
 import 'common.dart';
 import 'player_toggle.dart';
 
@@ -17,7 +16,6 @@ class ControlPanel extends StatelessWidget {
     required this.onNextEnd,
     required this.onNewEnd,
     required this.onClearEnd,
-    required this.onSave,
     required this.endStats,
     required this.onOpenSettings,
   });
@@ -30,7 +28,6 @@ class ControlPanel extends StatelessWidget {
   final VoidCallback onNextEnd;
   final VoidCallback onNewEnd;
   final VoidCallback onClearEnd;
-  final VoidCallback onSave;
   final EndStats endStats;
   final VoidCallback onOpenSettings;
 
@@ -103,15 +100,6 @@ class ControlPanel extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 10),
-              ElevatedButton.icon(
-                onPressed: onSave,
-                icon: const Icon(CupertinoIcons.check_mark_circled_solid),
-                label: const Text('Save'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.secondary,
-                  foregroundColor: Colors.white,
-                ),
-              ),
               const SizedBox(height: 8),
               TextButton.icon(
                 onPressed: onOpenSettings,

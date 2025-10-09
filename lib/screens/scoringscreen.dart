@@ -2,15 +2,15 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 
 // Models
 import '../models/player.dart';
 import '../models/shot.dart';
 import '../models/end_stats.dart';
+import '../utils/url_utils.dart';
 
 // Widgets
-import '../widgets/end_score_display.dart';
-
 // Canvas
 import '../canvas/canvas_area.dart';
 
@@ -23,8 +23,6 @@ import '../widgets/scoring_display.dart';
 
 // Utils
 import '../utils/scoring_utils.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
 
 class ScoringScreen extends StatefulWidget {
   final Player player1;
@@ -34,6 +32,7 @@ class ScoringScreen extends StatefulWidget {
   final int player1TotalScore;
   final int player2TotalScore;
   final Map<String, int> endScore;
+  final Map<int, Map<String, List<Shot>>>? initialShots;
 
   const ScoringScreen({
     super.key,
@@ -44,6 +43,7 @@ class ScoringScreen extends StatefulWidget {
     required this.player1TotalScore,
     required this.player2TotalScore,
     required this.endScore,
+    this.initialShots,
   });
 
   @override
@@ -68,42 +68,23 @@ class _ScoringScreenState extends State<ScoringScreen>
     _players = [widget.player1, widget.player2];
     _selectedPlayerId = widget.player1.id;
     _currentEnd = widget.currentEnd;
+
+    // Initialize shots map for current end
     _ensureEnd(_currentEnd);
 
-    // Initialize SharedPreferences and load shots after frame is built
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeSharedPreferences();
-    });
+    // Initialize with shots from URL if provided
+    if (widget.initialShots != null) {
+      debugPrint('Initial shots found: ${widget.initialShots}');
+      widget.initialShots!.forEach((end, playerShots) {
+        _shots[end] = Map<String, List<Shot>>.from(playerShots);
+      });
+    }
+
+    // Debug print current shots
+    debugPrint('Current shots state: $_shots');
   }
 
-  Future<void> _initializeSharedPreferences() async {
-    bool hadError = false;
-    // Load saved shots for all ends up to the current end
-    for (int end = 1; end <= widget.totalEnds; end++) {
-      try {
-        await _loadShotsForEnd(end);
-      } catch (e) {
-        hadError = true;
-        debugPrint('Failed to load end $end: $e');
-        // Continue loading other ends even if one fails
-        continue;
-      }
-    }
-
-    if (mounted) {
-      setState(() {});
-      if (hadError) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Some shots could not be loaded from storage'),
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 2),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-    }
-  } // UI state
+  // UI state
 
   Offset? _lastTapLocal;
   Offset? _hoverLocal; // desktop hover preview
@@ -141,6 +122,36 @@ class _ScoringScreenState extends State<ScoringScreen>
 
   void _switchPlayer(String id) => setState(() => _selectedPlayerId = id);
 
+  void _syncUrlWithShots() {
+    if (!mounted) return;
+
+    final router = GoRouter.of(context);
+    final currentUri = router.routeInformationProvider.value.uri;
+
+    // Get current query parameters
+    final params = Map<String, String>.from(currentUri.queryParameters);
+
+    // Update shot parameters
+    final p1Shots = _shots[_currentEnd]?['p1'] ?? [];
+    final p2Shots = _shots[_currentEnd]?['p2'] ?? [];
+
+    if (p1Shots.isNotEmpty) {
+      params['p1_shots'] = UrlUtils.shotsToUrlParam(p1Shots);
+    } else {
+      params.remove('p1_shots');
+    }
+
+    if (p2Shots.isNotEmpty) {
+      params['p2_shots'] = UrlUtils.shotsToUrlParam(p2Shots);
+    } else {
+      params.remove('p2_shots');
+    }
+
+    // Build new URI
+    final newUri = currentUri.replace(queryParameters: params);
+    router.go(newUri.toString());
+  }
+
   void _recordTap(Offset localPos, Size size) {
     if (!_canAddShot(_selectedPlayerId)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -170,10 +181,10 @@ class _ScoringScreenState extends State<ScoringScreen>
       // Initialize opponent's shots list if empty
       final opponentId = _selectedPlayerId == 'p1' ? 'p2' : 'p1';
       _playerShots(opponentId); // This ensures the list exists
-    });
 
-    // Save shots after adding a new one
-    _save();
+      // Sync URL with new shots
+      _syncUrlWithShots();
+    });
 
     final shotsCount = _playerShots(_selectedPlayerId).length;
     final msg = value == 'Ditch'
@@ -193,80 +204,10 @@ class _ScoringScreenState extends State<ScoringScreen>
   void _undo() {
     final list = _playerShots(_selectedPlayerId);
     if (list.isNotEmpty) {
-      setState(() => list.removeLast());
-      // Save shots after removing one
-      _save();
-    }
-  }
-
-  Future<void> _save() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-
-      // Convert the current end's shots to JSON
-      final endShotsJson = _shots[_currentEnd]?.map((playerId, shots) {
-        return MapEntry(playerId, shots.map((shot) => shot.toJson()).toList());
+      setState(() {
+        list.removeLast();
+        _syncUrlWithShots();
       });
-
-      if (endShotsJson != null) {
-        // Save to shared preferences with a key that includes the end number
-        final key = 'shots_end_$_currentEnd';
-        final jsonString = jsonEncode(endShotsJson);
-        final success = await prefs.setString(key, jsonString);
-
-        if (!success) {
-          throw Exception('Failed to save to SharedPreferences');
-        }
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Saved current end. Points stay visible.'),
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(milliseconds: 900),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error saving shots: $e'),
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 2),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _loadShotsForEnd(int end) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final key = 'shots_end_$end';
-      final storedData = prefs.getString(key);
-
-      if (storedData != null) {
-        final decodedData = jsonDecode(storedData) as Map<String, dynamic>;
-
-        _shots[end] = {};
-        decodedData.forEach((playerId, shotsJson) {
-          _shots[end]![playerId] = (shotsJson as List)
-              .map(
-                (shotJson) =>
-                    Shot.fromJson(Map<String, dynamic>.from(shotJson)),
-              )
-              .toList();
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        debugPrint('Error loading shots for end $end: $e');
-      }
-      // Re-throw to be handled by _initializeSharedPreferences
-      rethrow;
     }
   }
 
@@ -300,8 +241,7 @@ class _ScoringScreenState extends State<ScoringScreen>
   void _clearCurrentEnd() {
     setState(() {
       _shots[_currentEnd] = {'p1': [], 'p2': []};
-      // Save the cleared end
-      _save();
+      _syncUrlWithShots();
     });
   }
 
@@ -329,7 +269,6 @@ class _ScoringScreenState extends State<ScoringScreen>
         _undo();
         break;
       case 's':
-        _save();
         break;
     }
   }
@@ -368,7 +307,6 @@ class _ScoringScreenState extends State<ScoringScreen>
             onNextEnd: _nextEnd,
             onNewEnd: _newEnd,
             onClearEnd: _clearCurrentEnd,
-            onSave: _save,
             endStats: _computeStatsForEnd(_currentEnd),
             onOpenSettings: () => _openSettingsSheet(context),
           );
@@ -544,16 +482,6 @@ class _ScoringScreenState extends State<ScoringScreen>
                                       tint: g2,
                                     ),
                                   ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: AppButton(
-                                      onPressed: _save,
-                                      icon: CupertinoIcons
-                                          .check_mark_circled_solid,
-                                      label: 'Save',
-                                      color: g2,
-                                    ),
-                                  ),
                                 ],
                               ),
                             ],
@@ -633,86 +561,24 @@ class _ScoringScreenState extends State<ScoringScreen>
   }
 
   /* -------------------- UI Helpers -------------------- */
-  Widget _buildModernScoreCard({
-    required String playerName,
-    required Color playerColor,
-    required int score,
-    required int endNumber,
-  }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(
-                color: playerColor,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              playerName,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w500,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          score.toString(),
-          style: TextStyle(
-            color: playerColor,
-            fontWeight: FontWeight.bold,
-            fontSize: 28,
-          ),
-        ),
-      ],
-    );
-  }
 
   /* -------------------- Settings Sheet -------------------- */
-  Future<void> _clearAllData() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      // Clear shots data for all ends
-      for (int end = 1; end <= widget.totalEnds; end++) {
-        await prefs.remove('shots_end_$end');
-      }
-      // Clear shots map in memory
-      setState(() {
-        _shots.clear();
-        // Reinitialize current end
-        _ensureEnd(_currentEnd);
-      });
+  void _clearAllData() {
+    setState(() {
+      _shots.clear();
+      // Reinitialize current end
+      _ensureEnd(_currentEnd);
+    });
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('All data has been cleared'),
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 2),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error clearing data: $e'),
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 2),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('All data has been cleared'),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
