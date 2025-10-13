@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 // Models
 import '../models/player.dart';
@@ -152,6 +154,80 @@ class _ScoringScreenState extends State<ScoringScreen>
     router.go(newUri.toString());
   }
 
+  Future<void> _recordShot(Shot shot) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse(
+        'https://golf.forcempower.com/WBIC2025/update_end_wise_mat_length.php',
+      ),
+    );
+
+    final shotData = {
+      'msg': 'mat-legth-data',
+      'data': [
+        {
+          'match_id': '313', // Static for now
+          'game_id': 'game1', // Static for now
+          'team': '12', // Static for now
+          'player': '2', // Static for now
+          'ends': shot.end.toString(),
+          'shots': (_playerShots(shot.playerId).length).toString(),
+          'coordinate_1': shot.normPos.dx.toString(),
+          'coordinate_2': shot.normPos.dy.toString(),
+        },
+      ],
+    };
+
+    request.fields['mat_length_data'] = jsonEncode(shotData);
+
+    // Debug: Print detailed request information
+    debugPrint('\n🎯 Shot Recording Details 🎯');
+    debugPrint('──────────────────────────────');
+    debugPrint('URL: ${request.url}');
+    debugPrint('Method: ${request.method}');
+    debugPrint('\nShot Details:');
+    debugPrint('• Player ID: ${shot.playerId}');
+    debugPrint('• End Number: ${shot.end}');
+    debugPrint('• Shot Number: ${_playerShots(shot.playerId).length}');
+    debugPrint(
+      '• Position: (${shot.normPos.dx.toStringAsFixed(3)}, ${shot.normPos.dy.toStringAsFixed(3)})',
+    );
+    debugPrint('• Shot Value: ${shot.value}');
+    debugPrint('\nRequest Payload:');
+    debugPrint(const JsonEncoder.withIndent('  ').convert(shotData));
+    debugPrint('──────────────────────────────');
+
+    try {
+      final response = await request.send();
+      final responseBody = await response.stream.bytesToString();
+
+      debugPrint('\n📡 API Response:');
+      debugPrint('──────────────────────────────');
+      debugPrint('Status Code: ${response.statusCode}');
+      debugPrint('Headers: ${response.headers}');
+      debugPrint('\nResponse Body:');
+      try {
+        // Try to format JSON response if valid
+        final jsonResponse = jsonDecode(responseBody);
+        debugPrint(const JsonEncoder.withIndent('  ').convert(jsonResponse));
+      } catch (e) {
+        // If not JSON, print raw response
+        debugPrint(responseBody);
+      }
+      debugPrint('──────────────────────────────');
+
+      if (response.statusCode == 200) {
+        debugPrint('✅ Shot recorded successfully');
+      } else {
+        debugPrint('❌ Failed to record shot');
+        debugPrint('Status Code: ${response.statusCode}');
+        debugPrint('Reason: ${response.reasonPhrase}');
+      }
+    } catch (e) {
+      debugPrint('❌ Error recording shot: $e');
+    }
+  }
+
   void _recordTap(Offset localPos, Size size) {
     if (!_canAddShot(_selectedPlayerId)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -177,6 +253,9 @@ class _ScoringScreenState extends State<ScoringScreen>
       _lastTapLocal = localPos;
       _rippleCtrl.forward(from: 0);
       _playerShots(_selectedPlayerId).add(shot);
+
+      // Record shot to the server
+      _recordShot(shot);
 
       // Initialize opponent's shots list if empty
       final opponentId = _selectedPlayerId == 'p1' ? 'p2' : 'p1';
